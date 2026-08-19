@@ -1,0 +1,19 @@
+kind = "design-system"
+previewPath = "/healers-inc/"
+title = "Healers Inc"
+description = "The Healers Inc design system: a warm, wellness-focused visual language with an orange primary, peach secondary, and blue accents, extracted from the product's UI screens. Ships DTCG tokens, a themed component library, and a living style guide for all Healers Inc apps."
+version = "1.0.0"
+id = "artifacts/healers-inc"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/healers-inc/" ]
+localPort = 25408
+
+[services.development]
+run = "pnpm --filter @workspace/healers-inc run dev"
+
+[services.env]
+PORT = "25408"
+BASE_PATH = "/healers-inc/"
