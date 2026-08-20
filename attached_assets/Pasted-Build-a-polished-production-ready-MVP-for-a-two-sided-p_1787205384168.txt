@@ -1,0 +1,192 @@
+Build a polished, production-ready MVP for a two-sided practitioner marketplace mobile app. It is very important that the app should have a premium feel, where things such as animated buttons, animation popups, smooth transtions, and friendly messages are implemented.  The marketplace connects clients with service practitioners. There must be separate experiences for clients and practitioners, with role-based navigation and permissions.
+
+Core requirements
+
+1. Authentication and onboarding
+- During registration, ask whether the user is joining as a client or practitioner.
+- Allow users to sign up and sign in with email and password. Keep practioners and client logins separate - a practioner should also be able to signup as a client if they desire. 
+- There should be separate sign-in sreens for practioners and clients. 
+- A user must only access screens and data permitted for their role.
+- Create separate onboarding flows for clients and practitioners.
+
+
+
+2. Client portal
+
+Clients must be able to:
+
+- Create and edit a profile with name, profile photo, location, phone number, preferred time zone, and optional notes.
+- Search and browse practitioners.
+- Filter practitioners by specialty/category, name, language, location, appointment format, price range, and availability.
+- View practitioner profile pages containing:
+    - Name and profile photo
+    - Biography
+    - Qualifications and credentials
+    - Services and specialties
+    - Languages
+    - Appointment formats: online only,
+    - Country and Timezone
+    - Session duration and price
+    - Average rating and reviews
+    - Availability shown in the client’s local time zone
+- Select a service and available appointment slot.
+- Review the appointment details before confirming.
+- Book, reschedule, or cancel an appointment subject to the practitioner’s cancellation policy.
+- See upcoming and past appointments.
+- View appointment status: pending, confirmed, completed, cancelled, or declined.
+- Add an appointment to their device calendar using an ICS/calendar-compatible action.
+- Chat privately with practitioners.
+- Receive in-app notifications for booking confirmations, changes, cancellations, and new messages.
+- Leave a rating and review only after a completed appointment.
+
+
+
+3. Practitioner portal
+
+Practitioners must be able to:
+
+- Create and edit a professional profile.
+- Practioners sign up should be a multi step process, where practioners will be required to first provide their name, email address, country and phone number. Then an OTP code will be sent via email to the email address provided, and In the next step, they will be required to confirm their email in the next step by entering the code. Once email is confirmted they will continue to the next step and a multi step process will be initiated with a stepper on top to orient the signup process. Keep track of the signup progress so If at any time the signup process is interrupted the practioner will be taken to the step where the process was interrupted.In the first step they will be required to select one of four healing modalities, 1. Mind, 2. Body, 3.Spirit and 4.Psychologists/Counselors. In the next step Then they should be able to, a) Mention in one line how they refer to them professionally. In the next step they can write a bio about themselves and their specialities how they can help clients, and upload multiple photos for their profile
+
+    In the next step they should be able to. Select languages from a multiselect type that they can provide services in, their hourly rate and add add custom tags, using a multiselect free input text to highlight any additonal information about themselves 
+
+    This will complete the signup process
+
+- Create multiple services, each with:
+    - Service name
+    - Description
+    - Duration
+    - Price and currency
+    - Online, phone, or in-person format
+- Choose their primary IANA time zone, such as `America/Toronto`.
+- Define recurring weekly availability separately for each day.
+- Add multiple availability windows on the same day.
+- Add breaks, blocked periods, vacations, and one-time availability exceptions.
+- Set buffer time before and after appointments.
+- Set minimum booking notice and maximum advance-booking window.
+- Choose whether bookings are instantly confirmed or require approval.
+- View their calendar by day, week, and month.
+- View, accept, decline, reschedule, cancel, and mark appointments as completed.
+- See client details relevant to an appointment.
+- Chat privately with clients who have contacted or booked them.
+- View a dashboard showing upcoming appointments, pending requests, unread messages, and basic statistics.
+4. Time-zone-safe scheduling
+
+Time-zone handling is critical.
+
+- Store each practitioner’s time zone as a valid IANA time-zone identifier.
+- Store confirmed appointment timestamps in UTC.
+- Generate practitioner availability in the practitioner’s local time zone.
+- Display appointment slots in the client’s selected or detected local time zone.
+- Clearly show both time zones on the booking confirmation screen when they differ.
+- Handle daylight-saving-time changes correctly.
+- Never perform scheduling by manually adding or subtracting UTC offsets.
+- Use a reliable time-zone library such as Luxon or date-fns-tz.
+- Prevent double-booking with a database-level constraint or transaction.
+- Recheck slot availability immediately before confirming a booking.
+- Account for the service duration and practitioner buffer times when deciding whether a slot is available.
+- Handle ambiguous or nonexistent local times around daylight-saving transitions.
+- Include automated tests covering bookings between Toronto, London, Dubai, Karachi, and Los Angeles, including daylight-saving transitions.
+
+Example: if a Toronto practitioner makes 2:00–5:00 PM available, a client in another time zone must see the correct equivalent local time. The appointment must remain tied to the correct UTC instant even if either location later changes daylight-saving time.
+
+5. Search and discovery
+- Add a prominent search screen.
+- Support name and keyword searches.
+- Include practical filters and sorting.
+- Allow sorting by soonest availability, rating, price, and relevance.
+- Show practitioner cards with photo, specialty, price, rating, location, next available slot, and appointment format.
+- Add pagination or infinite scrolling.
+- Include empty states and a “clear filters” action.
+
+
+
+6. Real-time messaging
+
+Create private one-to-one conversations between clients and practitioners.
+
+- Include a conversation list with the latest message, timestamp, and unread count.
+- Include a message screen with real-time delivery.
+- Support text messages initially.
+- Show sent timestamps and read status.
+- Allow users to report or block another user.
+- Only conversation participants may read or send messages.
+- Do not expose private contact details unnecessarily.
+- Store message history securely.
+- Use Supabase Realtime subscriptions.
+- Prevent duplicate conversations between the same client and practitioner when possible.
+
+
+
+7. Booking rules and notifications
+- A client cannot book an unavailable, blocked, expired, or overlapping slot.
+- Prevent race conditions if two clients attempt to book the same slot.
+- Use idempotency protection so repeated confirmation taps do not create duplicate appointments.
+- Save a snapshot of the booked service’s name, duration, price, and currency so later service edits do not alter historical bookings.
+- Record an audit trail of important appointment status changes.
+- Create an in-app notification center.
+- Structure notification logic so push notifications and email reminders can be added later.
+- Prepare scheduled reminder records for 24 hours and 1 hour before an appointment, but do not require an external paid notification provider for the first version.
+
+
+
+8. Payments
+
+For the first version, build a checkout-ready booking flow but make payment optional.
+
+- Include a feature flag called `PAYMENTS_ENABLED`.
+- When disabled, clients confirm bookings without payment.
+- Structure the data model so Stripe Connect marketplace payments can be added later.
+- Never store raw payment-card information.
+1. Suggested database model
+
+Never rely only on client-side authorization. Enforce access rules at the database level.
+
+Suggested client tabs:
+
+- Discover
+- Appointments
+- Messages
+- Profile
+
+Suggested practitioner tabs:
+
+- Dashboard
+- Calendar
+- Appointments
+- Messages
+- Profile
+
+Add a role-appropriate home screen and avoid placeholder-only screens.
+
+1. Security and privacy
+- Validate and sanitize user input.
+- Apply row-level security to all private tables.
+- Clients can access only their own private profile, appointments, conversations, messages, reviews, and notifications.
+- Practitioners can access only appointments and conversations in which they participate.
+- Public practitioner search must expose only explicitly public profile fields.
+- Credential documents must be stored privately and must not be publicly downloadable.
+- Keep secrets in environment variables.
+- Do not place service-role keys or administrator credentials in frontend code.
+- Add basic rate-limiting guidance for authentication, booking, search, and messaging.
+- Include account deletion and data-export placeholders.
+
+
+
+Seed data and demonstration
+
+Create realistic seed data for at least:
+
+- Six practitioners in different specialties and time zones
+- Two client accounts
+- Multiple services and prices
+- Weekly schedules
+- Several appointments
+- Sample conversations and messages
+- Reviews and notifications
+1. Implement practitioner profiles, services, and recurring schedules.
+2. Implement client search and practitioner profile pages.
+3. Implement time-zone-safe availability generation and booking.
+4. Implement appointment management.
+5. Implement real-time messaging.
+6. Add notifications, reviews, seed data, tests, and final design polish.
