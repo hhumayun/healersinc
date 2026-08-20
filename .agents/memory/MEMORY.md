@@ -1,3 +1,4 @@
 - [OpenAPI codegen constraints](openapi-codegen-constraints.md) — never mix path + query params on one operation, and generated zod must import `zod/v4`.
 - [React Native on web](react-native-web-pitfalls.md) — Alert is a no-op in the browser preview; shadow props and device-zone dates also differ.
 - [API contract discipline](api-contract-discipline.md) — spec/route path drift 404s, zod coercing missing query params to "undefined", and time-aware status guards.
+- [Expo browser worklets](expo-web-worklets.md) — optional native Worklets can crash Expo Router before the web preview renders.

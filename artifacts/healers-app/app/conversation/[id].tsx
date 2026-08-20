@@ -8,12 +8,12 @@ import React, {
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { Feather } from '@expo/vector-icons';
 import {
   Stack,
@@ -382,7 +382,11 @@ export default function ConversationScreen() {
         }}
       />
 
-      <View style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled={Platform.OS !== 'web'}
+        style={{ flex: 1 }}
+      >
         {messagesLoading ? (
           <View style={{ flex: 1, padding: space(5), gap: space(4) }}>
             {[0, 1, 2, 3, 4].map((i) => (
@@ -499,7 +503,7 @@ export default function ConversationScreen() {
           blockedReason={blockedReason}
           bottomInset={insets.bottom}
         />
-      </View>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -606,8 +610,5 @@ function Composer({
     </View>
   );
 
-  if (Platform.OS === 'web') {
-    return body;
-  }
-  return <KeyboardStickyView>{body}</KeyboardStickyView>;
+  return body;
 }

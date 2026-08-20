@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
   radii,
@@ -32,22 +32,18 @@ export function errorMessage(err: unknown, fallback = 'Something went wrong.'): 
   return fallback;
 }
 
-/** Small circular brand mark used across the auth flow. */
+/** The approved Healers Inc layered-leaf mark, shared by the auth flow. */
 export function BrandMark({ size = 56 }: { size?: number }) {
-  const { colors } = useTheme();
   return (
-    <View
+    <Image
+      accessibilityLabel="Healers Inc"
+      source={require('@/assets/images/healers-logo.png')}
+      resizeMode="contain"
       style={{
         width: size,
         height: size,
-        borderRadius: radii.pill,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.primary,
       }}
-    >
-      <Feather name="feather" size={size * 0.5} color={colors.primaryForeground} />
-    </View>
+    />
   );
 }
 
