@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "Healers Inc"
+description = "A two-sided wellness marketplace mobile app. Clients discover practitioners across mind, body, spirit and psychology, browse real availability in their own time zone, book and pay attention to cancellation policies, message their practitioner, and leave reviews. Practitioners run the other side: a signup and onboarding flow, services and weekly availability, a booking inbox with accept/decline, a calendar, and an earnings dashboard."
+version = "1.0.0"
+id = "artifacts/healers-app"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 24393
+
+[services.development]
+run = "pnpm --filter @workspace/healers-app run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/healers-app", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/healers-app", "run", "serve" ]
+
+[services.env]
+PORT = "24393"
+BASE_PATH = "/"

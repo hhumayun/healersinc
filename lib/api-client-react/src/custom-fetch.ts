@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _unauthorizedHandler: (() => void) | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +43,18 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a callback invoked whenever the API answers `401 Unauthorized` to a
+ * request that carried a token.  Lets an app sign the user out from one place
+ * instead of every screen having to notice its own expired-session error.
+ * Pass `null` to clear the handler.
+ */
+export function setUnauthorizedHandler(
+  handler: (() => void) | null,
+): void {
+  _unauthorizedHandler = handler;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -363,6 +376,11 @@ export async function customFetch<T = unknown>(
   const response = await fetch(input, { ...init, method, headers });
 
   if (!response.ok) {
+    // A 401 on a request we authenticated means the session is gone: tell the
+    // app once, centrally, instead of leaving each screen with its own error.
+    if (response.status === 401 && headers.has("authorization")) {
+      _unauthorizedHandler?.();
+    }
     const errorData = await parseErrorBody(response, method);
     throw new ApiError(response, errorData, requestInfo);
   }
