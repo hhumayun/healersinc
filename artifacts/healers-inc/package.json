@@ -8,6 +8,8 @@
     "./tokens": "./src/generated/tokens.tsx",
     "./native": "./src/components/native/index.tsx",
     "./styles.css": "./src/index.css",
+    "./logo.svg": "./public/logo.svg",
+    "./favicon.svg": "./public/favicon.svg",
     "./components/*": "./src/components/*.tsx",
     "./lib/*": "./src/lib/*.tsx",
     "./hooks/*": "./src/hooks/*.tsx"
