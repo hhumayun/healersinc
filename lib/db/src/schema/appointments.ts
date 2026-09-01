@@ -70,11 +70,6 @@ export const appointmentsTable = pgTable(
     /** Repeat taps of "Confirm" reuse the same appointment instead of duplicating. */
     idempotencyKey: text("idempotency_key"),
 
-    // Payments are behind PAYMENTS_ENABLED; these columns keep the shape ready
-    // for Stripe Connect without storing any card data.
-    paymentStatus: text("payment_status").notNull().default("not_required"),
-    paymentReference: text("payment_reference"),
-
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

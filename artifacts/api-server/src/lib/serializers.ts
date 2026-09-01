@@ -7,6 +7,7 @@ import type {
   PartyRef,
   PractitionerCard,
   Review as ReviewDto,
+  PaymentSummary,
   Service as ServiceDto,
 } from "@workspace/api-zod";
 import type {
@@ -102,6 +103,7 @@ export interface AppointmentInput {
   practitionerHeadline?: string | null;
   viewerId: string;
   hasReview: boolean;
+  payment?: PaymentSummary | null;
 }
 
 export function toAppointment(input: AppointmentInput): AppointmentDto {
@@ -151,6 +153,7 @@ export function toAppointment(input: AppointmentInput): AppointmentDto {
       appointment.status === "completed" &&
       !input.hasReview,
     hasReview: input.hasReview,
+    payment: input.payment ?? null,
     createdAt: appointment.createdAt,
   };
 }

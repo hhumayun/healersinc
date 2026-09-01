@@ -7,6 +7,7 @@
  */
 import type { AppointmentStatus } from './appointmentStatus';
 import type { PartyRef } from './partyRef';
+import type { PaymentSummary } from './paymentSummary';
 import type { PortalRole } from './portalRole';
 import type { SessionFormat } from './sessionFormat';
 
@@ -35,5 +36,6 @@ export interface Appointment {
   viewerRole: PortalRole;
   canReview: boolean;
   hasReview: boolean;
+  payment: PaymentSummary | null;
   createdAt: Date;
 }

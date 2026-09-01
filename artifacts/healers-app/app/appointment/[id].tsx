@@ -1,22 +1,33 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetAppointmentCalendarFileQueryKey,
+  getGetAppointmentPaymentQueryKey,
   getGetAppointmentQueryKey,
+  getGetPractitionerDashboardQueryKey,
   getGetPractitionerAvailabilityQueryKey,
   getGetPractitionerProfileQueryKey,
+  getListAppointmentsQueryKey,
+  getListPractitionerPaymentsQueryKey,
   useActOnAppointment,
+  useCreateAppointmentCheckout,
+  useCreateAppointmentRefund,
   useGetAppointment,
   useGetAppointmentCalendarFile,
+  useGetAppointmentPayment,
   useGetPractitionerAvailability,
   useGetPractitionerProfile,
   useOpenConversation,
   type Appointment,
   type AppointmentActionRequestAction,
   type AvailabilitySlot,
+  type PaymentSummary,
+  type PractitionerPaymentStatus,
 } from '@workspace/api-client-react';
 import {
   radii,
@@ -44,11 +55,14 @@ import {
   formatCalendarDate,
   formatDuration,
   formatMoney,
+  makeIdempotencyKey,
   sessionFormatLabel,
   todayIso,
   zoneCity,
 } from '@/lib/format';
 import { confirm, notify } from '@/lib/dialog';
+
+WebBrowser.maybeCompleteAuthSession();
 
 function errorInfo(error: unknown): { message: string; status?: number } {
   if (error && typeof error === 'object') {
@@ -59,6 +73,90 @@ function errorInfo(error: unknown): { message: string; status?: number } {
     };
   }
   return { message: 'Something went wrong.' };
+}
+
+const paymentLabels: Record<
+  PractitionerPaymentStatus,
+  {
+    label: string;
+    title: string;
+    variant:
+      | 'default'
+      | 'secondary'
+      | 'outline'
+      | 'muted'
+      | 'success'
+      | 'warning'
+      | 'destructive';
+  }
+> = {
+  not_required: { label: 'Not required', title: 'Payment not required', variant: 'muted' },
+  unavailable: { label: 'Unavailable', title: 'In-app payment unavailable', variant: 'muted' },
+  checkout_available: {
+    label: 'Awaiting checkout',
+    title: 'Ready for secure payment',
+    variant: 'warning',
+  },
+  checkout_pending: {
+    label: 'Awaiting checkout',
+    title: 'Checkout started',
+    variant: 'warning',
+  },
+  processing: { label: 'Processing', title: 'Confirming payment', variant: 'warning' },
+  paid: { label: 'Paid', title: 'Payment complete', variant: 'success' },
+  partially_refunded: {
+    label: 'Partly refunded',
+    title: 'Payment partly refunded',
+    variant: 'secondary',
+  },
+  refunded: { label: 'Refunded', title: 'Payment refunded', variant: 'secondary' },
+  failed: { label: 'Failed', title: 'Payment failed', variant: 'destructive' },
+  cancelled: { label: 'Cancelled', title: 'Checkout cancelled', variant: 'muted' },
+};
+
+function PaymentCard({
+  payment,
+  confirming,
+}: {
+  payment: PaymentSummary;
+  confirming: boolean;
+}) {
+  const state = paymentLabels[payment.status];
+  const title = confirming ? 'Confirming payment' : state.title;
+  return (
+    <Card>
+      <CardContent style={{ padding: space(4), gap: space(3) }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: space(3),
+          }}
+        >
+          <Text variant="h3">Payment</Text>
+          <Badge
+            label={confirming ? 'Processing' : state.label}
+            variant={confirming ? 'warning' : state.variant}
+            size="sm"
+          />
+        </View>
+        <Text variant="title">{title}</Text>
+        <Text variant="small" tone="muted">
+          {confirming
+            ? 'The payment provider is confirming the result. This page will update when the secure webhook confirms payment.'
+            : payment.message}
+        </Text>
+        {payment.status !== 'not_required' && payment.status !== 'unavailable' ? (
+          <InfoRow
+            icon="credit-card"
+            label="Amount"
+            value={formatMoney(payment.grossAmountCents, payment.currency)}
+          />
+        ) : null}
+      </CardContent>
+    </Card>
+  );
 }
 
 function InfoRow({
@@ -234,14 +332,36 @@ export default function AppointmentScreen() {
     query: { enabled: !!appointmentId, queryKey: getGetAppointmentQueryKey(appointmentId) },
   });
   const act = useActOnAppointment();
+  const checkout = useCreateAppointmentCheckout();
+  const refund = useCreateAppointmentRefund();
   const openConversation = useOpenConversation();
 
   const [rescheduling, setRescheduling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [pendingAction, setPendingAction] =
     useState<AppointmentActionRequestAction | null>(null);
 
   const appointment = query.data;
+  const paymentQuery = useGetAppointmentPayment(appointmentId, {
+    query: {
+      enabled: !!appointmentId,
+      queryKey: getGetAppointmentPaymentQueryKey(appointmentId),
+      refetchInterval: confirmingPayment ? 2500 : false,
+    },
+  });
+  const payment = paymentQuery.data ?? appointment?.payment ?? null;
+
+  useEffect(() => {
+    if (
+      confirmingPayment &&
+      payment &&
+      payment.status !== 'checkout_pending' &&
+      payment.status !== 'processing'
+    ) {
+      setConfirmingPayment(false);
+    }
+  }, [confirmingPayment, payment]);
 
   const calendarFileQuery = useGetAppointmentCalendarFile(appointmentId, {
     query: {
@@ -270,7 +390,15 @@ export default function AppointmentScreen() {
           setPendingAction(null);
           setRescheduling(false);
           queryClient.setQueryData(getGetAppointmentQueryKey(appointmentId), updated);
-          queryClient.invalidateQueries();
+          void queryClient.invalidateQueries({
+            queryKey: getListAppointmentsQueryKey(),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: getGetPractitionerDashboardQueryKey(),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: getGetAppointmentPaymentQueryKey(appointmentId),
+          });
         },
         onError: (error) => {
           setPendingAction(null);
@@ -295,13 +423,82 @@ export default function AppointmentScreen() {
     const ok = await confirm({
       title: 'Cancel session',
       message: late
-        ? 'Cancelling a confirmed session close to its start time may count as a late cancellation. Continue?'
+        ? 'A client cancellation before the notice window is refunded automatically. A late cancellation is not refunded automatically. Continue?'
         : 'Are you sure you want to cancel this session?',
       confirmLabel: 'Cancel session',
       cancelLabel: 'Keep session',
       destructive: true,
     });
     if (ok) runAction('cancel');
+  };
+
+  const handleCheckout = () => {
+    setActionError(null);
+    checkout.mutate(
+      {
+        appointmentId,
+        data: { idempotencyKey: makeIdempotencyKey() },
+      },
+      {
+        onSuccess: async (session) => {
+          queryClient.setQueryData(
+            getGetAppointmentPaymentQueryKey(appointmentId),
+            session.payment,
+          );
+          try {
+            const returnUrl = Linking.createURL(`/appointment/${appointmentId}`);
+            const browserSession = WebBrowser.openAuthSessionAsync(
+              session.checkoutUrl,
+              returnUrl,
+            );
+            setConfirmingPayment(true);
+            const result = await browserSession;
+            if (result.type === 'cancel' || result.type === 'dismiss') {
+              setConfirmingPayment(false);
+            }
+            await Promise.all([query.refetch(), paymentQuery.refetch()]);
+          } catch (error) {
+            setConfirmingPayment(false);
+            setActionError(errorInfo(error).message);
+          }
+        },
+        onError: (error) => setActionError(errorInfo(error).message),
+      },
+    );
+  };
+
+  const confirmRefund = async () => {
+    const ok = await confirm({
+      title: 'Issue full refund',
+      message:
+        'This returns the full payment to the client. Cancellations made before the notice window are already refunded automatically; late cancellations are not.',
+      confirmLabel: 'Issue refund',
+      cancelLabel: 'Keep payment',
+      destructive: true,
+    });
+    if (!ok) return;
+    setActionError(null);
+    refund.mutate(
+      {
+        appointmentId,
+        data: {
+          idempotencyKey: makeIdempotencyKey(),
+          reason: 'Practitioner issued full refund',
+        },
+      },
+      {
+        onSuccess: async () => {
+          await Promise.all([query.refetch(), paymentQuery.refetch()]);
+          void queryClient.invalidateQueries({
+            queryKey: getListPractitionerPaymentsQueryKey(),
+          });
+          void queryClient.invalidateQueries({
+            queryKey: getListAppointmentsQueryKey(),
+          });
+        },
+        onError: (error) => setActionError(errorInfo(error).message),
+      },
+    );
   };
 
   const confirmDecline = async () => {
@@ -395,6 +592,21 @@ export default function AppointmentScreen() {
     isPractitioner && appointment.status === 'confirmed' && isPast;
   const canReview =
     !isPractitioner && appointment.canReview && !appointment.hasReview;
+  const canPay =
+    !isPractitioner &&
+    appointment.status === 'confirmed' &&
+    !isPast &&
+    (payment?.status === 'checkout_available' ||
+      payment?.status === 'checkout_pending' ||
+      payment?.status === 'failed' ||
+      payment?.status === 'cancelled');
+  const checkoutTitle =
+    payment?.status === 'checkout_pending'
+      ? 'Resume secure checkout'
+      : payment?.status === 'failed' || payment?.status === 'cancelled'
+        ? 'Try payment again'
+        : 'Pay securely';
+  const canRefund = isPractitioner && payment?.status === 'paid';
 
   const busy = act.isPending;
 
@@ -480,13 +692,24 @@ export default function AppointmentScreen() {
             <InfoRow
               icon="tag"
               label="Price"
-              value={`${formatMoney(
+                value={formatMoney(
                 appointment.servicePriceCents,
                 appointment.serviceCurrency,
-              )} (informational)`}
+                )}
             />
           </CardContent>
         </Card>
+
+        {payment ? (
+          <PaymentCard payment={payment} confirming={confirmingPayment} />
+        ) : paymentQuery.isLoading ? (
+          <Card>
+            <CardContent style={{ padding: space(4), gap: space(3) }}>
+              <Text variant="h3">Payment</Text>
+              <Spinner />
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Notes / cancellation reason */}
         {appointment.clientNotes ? (
@@ -537,6 +760,35 @@ export default function AppointmentScreen() {
 
         {/* Primary actions */}
         <View style={{ gap: space(3) }}>
+          {canPay ? (
+            <Button
+              title={checkoutTitle}
+              fullWidth
+              testID="appointment-pay-securely"
+              loading={checkout.isPending}
+              disabled={checkout.isPending}
+              onPress={handleCheckout}
+            />
+          ) : null}
+
+          {canRefund ? (
+            <>
+              <Text variant="small" tone="muted">
+                Cancellations before the notice window are refunded automatically.
+                Late cancellations are not; you can choose to issue a full refund.
+              </Text>
+              <Button
+                title="Issue full refund"
+                variant="destructive"
+                fullWidth
+                testID="appointment-full-refund"
+                loading={refund.isPending}
+                disabled={refund.isPending}
+                onPress={() => void confirmRefund()}
+              />
+            </>
+          ) : null}
+
           {canAcceptDecline ? (
             <>
               <Button

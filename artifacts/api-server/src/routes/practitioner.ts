@@ -8,6 +8,7 @@ import {
   conversationsTable,
   db,
   messagesTable,
+  paymentsTable,
   practitionerProfilesTable,
   reviewsTable,
   servicesTable,
@@ -30,12 +31,26 @@ import {
   type CalendarResponse,
   type DashboardSummary,
   type PractitionerProfile as PractitionerProfileDto,
+  ListPractitionerPaymentsResponse,
+  CreatePractitionerPaymentOnboardingLinkResponse,
 } from "@workspace/api-zod";
 import { isValidTimeZone, safeZone } from "@workspace/scheduling";
 import { requireRole } from "../lib/auth";
-import { badRequest, handler, notFound } from "../lib/errors";
+import { badRequest, conflict, handler, notFound } from "../lib/errors";
 import { requireCalendarRange } from "../lib/query";
 import { toAppointment, toAvailabilityException, toService } from "../lib/serializers";
+import { getUncachableStripeClient } from "../stripeClient";
+import {
+  loadPaymentAccount,
+  persistStripeAccount,
+  publicAccountStatus,
+  toPaymentSummary,
+} from "../lib/payments";
+import {
+  countryIsEligible,
+  normalizeCountry,
+  paymentPolicy,
+} from "../lib/paymentPolicy";
 
 const router: IRouter = Router();
 
@@ -44,6 +59,16 @@ function assertTimezone(timezone: string): string {
     throw badRequest(`"${timezone}" is not a time zone we recognise.`);
   }
   return timezone;
+}
+
+function isStripeConnectNotConfigured(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { type?: unknown; message?: unknown };
+  return (
+    candidate.type === "StripeInvalidRequestError" &&
+    typeof candidate.message === "string" &&
+    candidate.message.includes("signed up for Connect")
+  );
 }
 
 async function loadProfile(userId: string): Promise<PractitionerProfile> {
@@ -423,6 +448,108 @@ function profileCompletion(
 }
 
 router.get(
+  "/practitioner/payments",
+  handler(async (req, res) => {
+    const auth = requireRole(req.auth, "practitioner");
+    let account = await loadPaymentAccount(auth.user.id);
+    if (paymentPolicy.enabled && account) {
+      const stripe = await getUncachableStripeClient();
+      account = await persistStripeAccount(
+        auth.user.id,
+        await stripe.accounts.retrieve(account.stripeAccountId),
+      );
+    }
+    const accountStatus = publicAccountStatus(
+      account?.country ?? auth.user.country,
+      account,
+    );
+    const rows = await db
+      .select({ payment: paymentsTable })
+      .from(paymentsTable)
+      .innerJoin(
+        appointmentsTable,
+        eq(appointmentsTable.id, paymentsTable.appointmentId),
+      )
+      .where(eq(appointmentsTable.practitionerId, auth.user.id))
+      .orderBy(sql`${paymentsTable.createdAt} desc`);
+    res.json(
+      ListPractitionerPaymentsResponse.parse({
+        accountStatus: accountStatus.status,
+        message: accountStatus.message,
+        country: normalizeCountry(auth.user.country),
+        payments: rows.map(({ payment }) => toPaymentSummary(payment)),
+      }),
+    );
+  }),
+);
+
+router.post(
+  "/practitioner/payments/onboarding-link",
+  handler(async (req, res) => {
+    const auth = requireRole(req.auth, "practitioner");
+    if (!paymentPolicy.enabled) throw conflict("In-app payments are currently disabled.");
+    const country = normalizeCountry(auth.user.country);
+    if (!country || !countryIsEligible(country)) {
+      throw conflict("In-app payments are not available in your country yet.");
+    }
+    const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim();
+    if (!domain) throw new Error("REPLIT_DOMAINS is required for payment onboarding.");
+    const stripe = await getUncachableStripeClient();
+    const countrySpec = await stripe.countrySpecs.retrieve(country);
+    if (!countrySpec.supported_payment_methods.includes("card")) {
+      throw conflict("Card payments are unavailable for this country.");
+    }
+    let account = await loadPaymentAccount(auth.user.id);
+    let link;
+    try {
+      if (!account) {
+        const created = await stripe.accounts.create(
+          {
+            type: "express",
+            country,
+            email: auth.user.email,
+            capabilities: {
+              card_payments: { requested: true },
+              transfers: { requested: true },
+            },
+            metadata: { practitionerId: auth.user.id },
+          },
+          { idempotencyKey: `connect-account:${auth.user.id}` },
+        );
+        account = await persistStripeAccount(auth.user.id, created);
+      } else {
+        account = await persistStripeAccount(
+          auth.user.id,
+          await stripe.accounts.retrieve(account.stripeAccountId),
+        );
+      }
+      const baseUrl = `https://${domain}`;
+      link = await stripe.accountLinks.create({
+        account: account.stripeAccountId,
+        type: "account_onboarding",
+        return_url: `${baseUrl}/api/payments/onboarding/return`,
+        refresh_url: `${baseUrl}/api/payments/onboarding/refresh`,
+      });
+    } catch (error) {
+      if (isStripeConnectNotConfigured(error)) {
+        throw conflict(
+          "Stripe Connect must be activated for this platform before payout setup can begin.",
+          "stripe_connect_unavailable",
+        );
+      }
+      throw error;
+    }
+    res.json(
+      CreatePractitionerPaymentOnboardingLinkResponse.parse({
+        status: publicAccountStatus(country, account).status,
+        url: link.url,
+        expiresAt: new Date(link.expires_at * 1000),
+      }),
+    );
+  }),
+);
+
+router.get(
   "/practitioner/dashboard",
   handler(async (req, res) => {
     const auth = requireRole(req.auth, "practitioner");
@@ -436,7 +563,7 @@ router.get(
 
     const mine = eq(appointmentsTable.practitionerId, auth.user.id);
 
-    const [[pending], [upcoming], [completed], [services], [rules], [unread]] =
+    const [[pending], [upcoming], [completed], [earnings], [services], [rules], [unread]] =
       await Promise.all([
         db
           .select({ value: count() })
@@ -463,6 +590,32 @@ router.get(
               mine,
               eq(appointmentsTable.status, "completed"),
               gte(appointmentsTable.startsAt, monthStart),
+            ),
+          ),
+        db
+          .select({
+            earnings: sql<number>`
+              coalesce(sum(
+                ${paymentsTable.practitionerNetCents} -
+                coalesce((
+                  select sum(r.amount_cents * (10000 - ${paymentsTable.platformFeeBasisPoints}) / 10000)
+                  from refunds r
+                  where r.payment_id = ${paymentsTable.id}
+                    and r.status = 'succeeded'
+                ), 0)
+              ), 0)::int
+            `,
+          })
+          .from(paymentsTable)
+          .innerJoin(
+            appointmentsTable,
+            eq(appointmentsTable.id, paymentsTable.appointmentId),
+          )
+          .where(
+            and(
+              mine,
+              inArray(paymentsTable.status, ["paid", "partially_refunded"]),
+              gte(paymentsTable.paidAt, monthStart),
             ),
           ),
         db
@@ -512,7 +665,9 @@ router.get(
       pendingCount: pending?.value ?? 0,
       upcomingCount: upcoming?.value ?? 0,
       completedThisMonth: completed?.value ?? 0,
-      earningsThisMonthCents: Number(completed?.earnings ?? 0),
+      earningsThisMonthCents: Number(
+        earnings?.earnings ?? 0,
+      ),
       currency: profile.currency,
       ratingAverage: profile.ratingAverage ? Number(profile.ratingAverage) : null,
       ratingCount: profile.ratingCount,

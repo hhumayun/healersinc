@@ -46,12 +46,14 @@ function HubRow({
   description,
   onPress,
   destructive,
+  testID,
 }: {
   icon: keyof typeof Feather.glyphMap;
   label: string;
   description?: string;
   onPress: () => void;
   destructive?: boolean;
+  testID?: string;
 }) {
   const { colors } = useTheme();
   const tint = destructive ? colors.destructive : colors.primary;
@@ -59,6 +61,7 @@ function HubRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      testID={testID}
       onPress={onPress}
       style={({ pressed }) => ({
         flexDirection: 'row',
@@ -248,6 +251,13 @@ export default function ProfileScreen() {
               label="Availability"
               description="Your weekly hours"
               onPress={() => router.push('/manage/availability' as Href)}
+            />
+            <HubRow
+              icon="credit-card"
+              label="Payments"
+              description="Secure checkout and payouts"
+              testID="profile-payments"
+              onPress={() => router.push('/manage/payments' as Href)}
             />
             <HubRow
               icon="sliders"

@@ -70,6 +70,44 @@ export const AppointmentStatus = {
   declined: 'declined',
 } as const;
 
+export type PractitionerPaymentStatus = typeof PractitionerPaymentStatus[keyof typeof PractitionerPaymentStatus];
+
+
+export const PractitionerPaymentStatus = {
+  checkout_available: 'checkout_available',
+  not_required: 'not_required',
+  unavailable: 'unavailable',
+  checkout_pending: 'checkout_pending',
+  processing: 'processing',
+  paid: 'paid',
+  partially_refunded: 'partially_refunded',
+  refunded: 'refunded',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type PaymentAccountStatus = typeof PaymentAccountStatus[keyof typeof PaymentAccountStatus];
+
+
+export const PaymentAccountStatus = {
+  feature_disabled: 'feature_disabled',
+  policy_unavailable: 'policy_unavailable',
+  onboarding_required: 'onboarding_required',
+  pending: 'pending',
+  restricted: 'restricted',
+  ready: 'ready',
+} as const;
+
+export type RefundStatus = typeof RefundStatus[keyof typeof RefundStatus];
+
+
+export const RefundStatus = {
+  pending: 'pending',
+  succeeded: 'succeeded',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
 export type AppointmentScope = typeof AppointmentScope[keyof typeof AppointmentScope];
 
 
@@ -502,6 +540,26 @@ export interface PartyRef {
   timezone: string;
 }
 
+export interface PaymentSummary {
+  /** @nullable */
+  id: string | null;
+  appointmentId: string;
+  status: PractitionerPaymentStatus;
+  /** @nullable */
+  message: string | null;
+  grossAmountCents: number;
+  platformFeeCents: number;
+  /** Platform fee policy captured when checkout was created. */
+  platformFeeBasisPoints: number;
+  practitionerNetCents: number;
+  currency: string;
+  /** @nullable */
+  paidAt: string | null;
+  /** @nullable */
+  refundedAt: string | null;
+  createdAt: string;
+}
+
 export interface Appointment {
   id: string;
   status: AppointmentStatus;
@@ -527,7 +585,59 @@ export interface Appointment {
   viewerRole: PortalRole;
   canReview: boolean;
   hasReview: boolean;
+  payment: PaymentSummary | null;
   createdAt: string;
+}
+
+export interface PractitionerPayments {
+  accountStatus: PaymentAccountStatus;
+  message: string;
+  /** @nullable */
+  country: string | null;
+  payments: PaymentSummary[];
+}
+
+export interface CheckoutSessionResponse {
+  payment: PaymentSummary;
+  checkoutUrl: string;
+  expiresAt: string;
+}
+
+export interface RefundSummary {
+  id: string;
+  paymentId: string;
+  amountCents: number;
+  currency: string;
+  status: RefundStatus;
+  /** @nullable */
+  reason: string | null;
+  /** @nullable */
+  refundedAt: string | null;
+  createdAt: string;
+}
+
+export interface PaymentAccountLink {
+  status: PaymentAccountStatus;
+  url: string;
+  expiresAt: string;
+}
+
+export interface PaymentCheckoutInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  idempotencyKey: string;
+}
+
+export interface PaymentRefundInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  idempotencyKey: string;
+  /** @nullable */
+  reason?: string | null;
 }
 
 export interface BookingRequest {

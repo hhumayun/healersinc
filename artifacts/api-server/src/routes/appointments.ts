@@ -14,6 +14,14 @@ import {
 } from "@workspace/db";
 import {
   ActOnAppointmentBody,
+  CreateAppointmentCheckoutBody,
+  CreateAppointmentCheckoutParams,
+  CreateAppointmentCheckoutResponse,
+  CreateAppointmentRefundBody,
+  CreateAppointmentRefundParams,
+  CreateAppointmentRefundResponse,
+  GetAppointmentPaymentParams,
+  GetAppointmentPaymentResponse,
   CreateBookingBody,
   ListAppointmentsQueryParams,
   type Appointment as AppointmentDto,
@@ -29,6 +37,21 @@ import { notify } from "../lib/notifications";
 import { publishToUser } from "../lib/realtime";
 import { buildIcs, icsFilename } from "../lib/ics";
 import { loadReviewedAppointmentIds } from "./practitioner";
+import {
+  accountReady,
+  cancelPendingCheckout,
+  classifyUnpaidPayment,
+  createCheckout,
+  loadPaymentAccount,
+  loadPaymentForAppointment,
+  persistStripeAccount,
+  requestFullRefund,
+  toPaymentSummary,
+  toRefundSummary,
+  unpaidPaymentSummary,
+} from "../lib/payments";
+import { countryIsEligible, paymentPolicy } from "../lib/paymentPolicy";
+import { getUncachableStripeClient } from "../stripeClient";
 
 const router: IRouter = Router();
 
@@ -70,16 +93,33 @@ async function serialise(
     rows.map((row) => row.appointment.id),
   );
 
-  return rows.map((row) =>
-    toAppointment({
+  return Promise.all(rows.map(async (row) => {
+    const payment = await loadPaymentForAppointment(row.appointment.id);
+    const account = payment
+      ? null
+      : await loadPaymentAccount(row.appointment.practitionerId);
+    const availability = classifyUnpaidPayment({
+      appointmentStatus: row.appointment.status,
+      isFuture: row.appointment.endsAt.getTime() > Date.now(),
+      priceCents: row.appointment.servicePriceCents,
+      paymentsEnabled: paymentPolicy.enabled,
+      countryEligible: countryIsEligible(row.practitioner.country),
+      practitionerReady: Boolean(
+        account && countryIsEligible(account.country) && accountReady(account),
+      ),
+    });
+    return toAppointment({
       appointment: row.appointment,
       client: row.client,
       practitioner: row.practitioner,
       practitionerHeadline: row.practitionerHeadline,
       viewerId,
       hasReview: reviewed.has(row.appointment.id),
-    }),
-  );
+      payment: payment
+        ? toPaymentSummary(payment)
+        : unpaidPaymentSummary(row.appointment, availability),
+    });
+  }));
 }
 
 /** Load an appointment the signed-in person is actually part of. */
@@ -411,6 +451,34 @@ router.post(
             : `${actorName} cancelled the ${appointment.serviceName}.`,
           appointmentId: updated.id,
         });
+        if (!late) {
+          const payment = await loadPaymentForAppointment(updated.id);
+          if (payment && ["paid", "partially_refunded"].includes(payment.status)) {
+            try {
+              await requestFullRefund({
+                payment,
+                requestedById: auth.user.id,
+                reason: "Automatic refund for timely cancellation",
+              });
+            } catch (err) {
+              req.log.error(
+                { err },
+                "Automatic cancellation refund could not be requested",
+              );
+            }
+          }
+        }
+        const checkoutPayment = await loadPaymentForAppointment(updated.id);
+        if (checkoutPayment?.status === "checkout_pending") {
+          try {
+            await cancelPendingCheckout(checkoutPayment);
+          } catch (err) {
+            req.log.warn(
+              { err },
+              "Cancelled checkout could not be expired at Stripe",
+            );
+          }
+        }
         break;
       }
 
@@ -486,6 +554,106 @@ router.post(
 
     const [dto] = await serialise([{ ...row, appointment: updated }], auth.user.id);
     res.json(dto);
+  }),
+);
+
+router.post(
+  "/appointments/:appointmentId/checkout",
+  handler(async (req, res) => {
+    const auth = requireRole(req.auth, "client");
+    const params = CreateAppointmentCheckoutParams.parse(req.params);
+    const body = CreateAppointmentCheckoutBody.parse(req.body);
+    const row = await loadOwnAppointment(params.appointmentId, auth.user.id);
+    const appointment = row.appointment;
+    if (appointment.clientId !== auth.user.id) throw forbidden("Only the client can pay.");
+    if (!paymentPolicy.enabled) throw conflict("In-app payments are currently disabled.");
+    if (appointment.status !== "confirmed") {
+      throw conflict("Checkout is available only after the appointment is confirmed.");
+    }
+    if (appointment.endsAt.getTime() <= Date.now()) throw conflict("This appointment has passed.");
+    if (appointment.servicePriceCents <= 0) throw conflict("This appointment does not require payment.");
+    if (!countryIsEligible(row.practitioner.country)) {
+      throw conflict("This practitioner uses the existing unpaid booking flow.");
+    }
+    let account = await loadPaymentAccount(appointment.practitionerId);
+    if (!account) throw conflict("This practitioner is not ready to accept payments.");
+    const stripe = await getUncachableStripeClient();
+    account = await persistStripeAccount(
+      appointment.practitionerId,
+      await stripe.accounts.retrieve(account.stripeAccountId),
+    );
+    if (!countryIsEligible(account.country) || !accountReady(account)) {
+      throw conflict("This practitioner is not ready to accept payments.");
+    }
+    const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim();
+    if (!domain) throw new Error("REPLIT_DOMAINS is required for checkout.");
+    const checkout = await createCheckout({
+      appointment,
+      account,
+      clientEmail: auth.user.email,
+      baseUrl: `https://${domain}`,
+    });
+    res.json(
+      CreateAppointmentCheckoutResponse.parse({
+        payment: toPaymentSummary(checkout.payment),
+        checkoutUrl: checkout.checkoutUrl,
+        expiresAt: checkout.expiresAt,
+      }),
+    );
+  }),
+);
+
+router.get(
+  "/appointments/:appointmentId/payment",
+  handler(async (req, res) => {
+    const auth = requireAuth(req.auth);
+    const params = GetAppointmentPaymentParams.parse(req.params);
+    const row = await loadOwnAppointment(params.appointmentId, auth.user.id);
+    const payment = await loadPaymentForAppointment(params.appointmentId);
+    if (payment) {
+      res.json(GetAppointmentPaymentResponse.parse(toPaymentSummary(payment)));
+      return;
+    }
+    const account = await loadPaymentAccount(row.appointment.practitionerId);
+    const availability = classifyUnpaidPayment({
+      appointmentStatus: row.appointment.status,
+      isFuture: row.appointment.endsAt.getTime() > Date.now(),
+      priceCents: row.appointment.servicePriceCents,
+      paymentsEnabled: paymentPolicy.enabled,
+      countryEligible: countryIsEligible(row.practitioner.country),
+      practitionerReady: Boolean(
+        account && countryIsEligible(account.country) && accountReady(account),
+      ),
+    });
+    res.json(
+      GetAppointmentPaymentResponse.parse(
+        unpaidPaymentSummary(row.appointment, availability),
+      ),
+    );
+  }),
+);
+
+router.post(
+  "/appointments/:appointmentId/refunds",
+  handler(async (req, res) => {
+    const auth = requireRole(req.auth, "practitioner");
+    const params = CreateAppointmentRefundParams.parse(req.params);
+    const body = CreateAppointmentRefundBody.parse(req.body);
+    const row = await loadOwnAppointment(params.appointmentId, auth.user.id);
+    if (row.appointment.practitionerId !== auth.user.id) {
+      throw forbidden("Only the practitioner can issue this refund.");
+    }
+    if (!paymentPolicy.enabled) throw conflict("In-app payments are currently disabled.");
+    const payment = await loadPaymentForAppointment(params.appointmentId);
+    if (!payment) throw conflict("There is no captured payment to refund.");
+    const refund = await requestFullRefund({
+      payment,
+      requestedById: auth.user.id,
+      reason: body.reason,
+    });
+    res.status(201).json(
+      CreateAppointmentRefundResponse.parse(toRefundSummary(refund)),
+    );
   }),
 );
 

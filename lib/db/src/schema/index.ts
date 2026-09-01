@@ -4,6 +4,7 @@ export * from "./profiles";
 export * from "./services";
 export * from "./availability";
 export * from "./appointments";
+export * from "./payments";
 export * from "./messaging";
 export * from "./reviews";
 export * from "./notifications";

@@ -961,8 +961,57 @@ export const GetPractitionerDashboardResponse = zod.object({
   "viewerRole": zod.enum(['client', 'practitioner']),
   "canReview": zod.boolean(),
   "hasReview": zod.boolean(),
+  "payment": zod.union([zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
   "createdAt": zod.coerce.date()
 }),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Payments for the signed-in practitioner
+ */
+export const ListPractitionerPaymentsResponse = zod.object({
+  "accountStatus": zod.enum(['feature_disabled', 'policy_unavailable', 'onboarding_required', 'pending', 'restricted', 'ready']),
+  "message": zod.string(),
+  "country": zod.string().nullable(),
+  "payments": zod.array(zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * The server supplies its configured refresh and return destinations; clients cannot override either URL.
+ * @summary Create a hosted Stripe Connect onboarding link
+ */
+export const CreatePractitionerPaymentOnboardingLinkResponse = zod.object({
+  "status": zod.enum(['feature_disabled', 'policy_unavailable', 'onboarding_required', 'pending', 'restricted', 'ready']),
+  "url": zod.url(),
+  "expiresAt": zod.coerce.date()
 })
 
 
@@ -1013,6 +1062,20 @@ export const GetPractitionerCalendarResponse = zod.object({
   "viewerRole": zod.enum(['client', 'practitioner']),
   "canReview": zod.boolean(),
   "hasReview": zod.boolean(),
+  "payment": zod.union([zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
   "createdAt": zod.coerce.date()
 }))
 }))
@@ -1061,6 +1124,20 @@ export const ListAppointmentsResponseItem = zod.object({
   "viewerRole": zod.enum(['client', 'practitioner']),
   "canReview": zod.boolean(),
   "hasReview": zod.boolean(),
+  "payment": zod.union([zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
   "createdAt": zod.coerce.date()
 })
 export const ListAppointmentsResponse = zod.array(ListAppointmentsResponseItem)
@@ -1118,6 +1195,20 @@ export const CreateBookingResponse = zod.object({
   "viewerRole": zod.enum(['client', 'practitioner']),
   "canReview": zod.boolean(),
   "hasReview": zod.boolean(),
+  "payment": zod.union([zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
   "createdAt": zod.coerce.date()
 })
 
@@ -1164,6 +1255,20 @@ export const GetAppointmentResponse = zod.object({
   "viewerRole": zod.enum(['client', 'practitioner']),
   "canReview": zod.boolean(),
   "hasReview": zod.boolean(),
+  "payment": zod.union([zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
   "createdAt": zod.coerce.date()
 })
 
@@ -1216,6 +1321,110 @@ export const ActOnAppointmentResponse = zod.object({
   "viewerRole": zod.enum(['client', 'practitioner']),
   "canReview": zod.boolean(),
   "hasReview": zod.boolean(),
+  "payment": zod.union([zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),zod.null()]),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * Checkout is available only after practitioner acceptance. The server supplies the configured success and cancellation destinations.
+ * @summary Create or reuse hosted checkout for an accepted appointment
+ */
+export const CreateAppointmentCheckoutParams = zod.object({
+  "appointmentId": zod.uuid()
+})
+
+export const createAppointmentCheckoutBodyIdempotencyKeyMin = 8;
+export const createAppointmentCheckoutBodyIdempotencyKeyMax = 128;
+
+
+
+export const CreateAppointmentCheckoutBody = zod.object({
+  "idempotencyKey": zod.string().min(createAppointmentCheckoutBodyIdempotencyKeyMin).max(createAppointmentCheckoutBodyIdempotencyKeyMax)
+})
+
+export const CreateAppointmentCheckoutResponse = zod.object({
+  "payment": zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+}),
+  "checkoutUrl": zod.url(),
+  "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Payment state for an appointment
+ */
+export const GetAppointmentPaymentParams = zod.object({
+  "appointmentId": zod.uuid()
+})
+
+export const GetAppointmentPaymentResponse = zod.object({
+  "id": zod.uuid().nullable(),
+  "appointmentId": zod.uuid(),
+  "status": zod.enum(['checkout_available', 'not_required', 'unavailable', 'checkout_pending', 'processing', 'paid', 'partially_refunded', 'refunded', 'failed', 'cancelled']),
+  "message": zod.string().nullable(),
+  "grossAmountCents": zod.int(),
+  "platformFeeCents": zod.int(),
+  "platformFeeBasisPoints": zod.int().describe('Platform fee policy captured when checkout was created.'),
+  "practitionerNetCents": zod.int(),
+  "currency": zod.string(),
+  "paidAt": zod.coerce.date().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * Cancellations before the practitioner's notice window receive a full refund. Late cancellations are not refunded automatically.
+ * @summary Request a full appointment refund
+ */
+export const CreateAppointmentRefundParams = zod.object({
+  "appointmentId": zod.uuid()
+})
+
+export const createAppointmentRefundBodyIdempotencyKeyMin = 8;
+export const createAppointmentRefundBodyIdempotencyKeyMax = 128;
+
+
+
+export const CreateAppointmentRefundBody = zod.object({
+  "idempotencyKey": zod.string().min(createAppointmentRefundBodyIdempotencyKeyMin).max(createAppointmentRefundBodyIdempotencyKeyMax),
+  "reason": zod.string().nullish()
+})
+
+export const CreateAppointmentRefundResponse = zod.object({
+  "id": zod.uuid(),
+  "paymentId": zod.uuid(),
+  "amountCents": zod.int(),
+  "currency": zod.string(),
+  "status": zod.enum(['pending', 'succeeded', 'failed', 'cancelled']),
+  "reason": zod.string().nullable(),
+  "refundedAt": zod.coerce.date().nullable(),
   "createdAt": zod.coerce.date()
 })
 

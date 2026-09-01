@@ -5,9 +5,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getGetPractitionerAvailabilityQueryKey,
+  getGetAppConfigQueryKey,
   getGetPractitionerProfileQueryKey,
   useCreateBooking,
   useGetPractitionerAvailability,
+  useGetAppConfig,
   useGetPractitionerProfile,
   type AvailabilitySlot,
   type Service,
@@ -131,6 +133,9 @@ export default function BookScreen() {
     : null;
 
   const viewerTimezone = user?.timezone ?? 'UTC';
+  const appConfigQuery = useGetAppConfig({
+    query: { queryKey: getGetAppConfigQueryKey() },
+  });
 
   const profileQuery = useGetPractitionerProfile(practitionerId, {
     query: {
@@ -607,6 +612,13 @@ export default function BookScreen() {
                     size="sm"
                   />
                 </View>
+                 {appConfigQuery.data?.paymentsEnabled ? (
+                   <Text variant="small" tone="muted">
+                     No payment is taken now. If this practitioner supports in-app
+                     payments, payment is requested securely only after the session is
+                     accepted and confirmed.
+                   </Text>
+                 ) : null}
               </View>
             </Card>
           </View>
@@ -649,6 +661,12 @@ export default function BookScreen() {
           loading={createBooking.isPending}
           onPress={confirm}
         />
+        {canConfirm && appConfigQuery.data?.paymentsEnabled ? (
+          <Text variant="caption" tone="muted" align="center">
+            You’ll book first and pay only after confirmation when in-app payment is
+            available.
+          </Text>
+        ) : null}
       </View>
     </View>
   );

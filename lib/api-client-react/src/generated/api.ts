@@ -33,6 +33,7 @@ import type {
   BookingRequest,
   CalendarFile,
   CalendarResponse,
+  CheckoutSessionResponse,
   ClientProfile,
   ClientProfileUpdate,
   ClientRegistration,
@@ -52,6 +53,11 @@ import type {
   NotificationReadRequest,
   OtpResendRequest,
   OtpVerification,
+  PaymentAccountLink,
+  PaymentCheckoutInput,
+  PaymentRefundInput,
+  PaymentSummary,
+  PractitionerPayments,
   PractitionerProfile,
   PractitionerProfileUpdate,
   PractitionerPublicProfile,
@@ -59,6 +65,7 @@ import type {
   PractitionerSignupDraftUpdate,
   PractitionerSignupStart,
   PractitionerSignupState,
+  RefundSummary,
   ReportRequest,
   Review,
   ReviewDraft,
@@ -2398,6 +2405,155 @@ export function useGetPractitionerDashboard<TData = Awaited<ReturnType<typeof ge
 
 
 
+export const getListPractitionerPaymentsUrl = () => {
+
+
+
+
+  return `/api/practitioner/payments`
+}
+
+/**
+ * @summary Payments for the signed-in practitioner
+ */
+export const listPractitionerPayments = async ( options?: Parameters<typeof customFetch>[1]): Promise<PractitionerPayments> => {
+
+  return customFetch<PractitionerPayments>(getListPractitionerPaymentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPractitionerPaymentsQueryKey = () => {
+    return [
+    `/api/practitioner/payments`
+    ] as const;
+    }
+
+
+export const getListPractitionerPaymentsQueryOptions = <TData = Awaited<ReturnType<typeof listPractitionerPayments>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPractitionerPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPractitionerPaymentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPractitionerPayments>>> = ({ signal }) => listPractitionerPayments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPractitionerPayments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPractitionerPaymentsQueryResult = NonNullable<Awaited<ReturnType<typeof listPractitionerPayments>>>
+export type ListPractitionerPaymentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Payments for the signed-in practitioner
+ */
+
+export function useListPractitionerPayments<TData = Awaited<ReturnType<typeof listPractitionerPayments>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPractitionerPayments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPractitionerPaymentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreatePractitionerPaymentOnboardingLinkUrl = () => {
+
+
+
+
+  return `/api/practitioner/payments/onboarding-link`
+}
+
+/**
+ * The server supplies its configured refresh and return destinations; clients cannot override either URL.
+ * @summary Create a hosted Stripe Connect onboarding link
+ */
+export const createPractitionerPaymentOnboardingLink = async ( options?: Parameters<typeof customFetch>[1]): Promise<PaymentAccountLink> => {
+
+  return customFetch<PaymentAccountLink>(getCreatePractitionerPaymentOnboardingLinkUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCreatePractitionerPaymentOnboardingLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,void, TContext> => {
+
+const mutationKey = ['createPractitionerPaymentOnboardingLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, void> = () => {
+
+
+          return  createPractitionerPaymentOnboardingLink(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePractitionerPaymentOnboardingLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>>
+
+    export type CreatePractitionerPaymentOnboardingLinkMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a hosted Stripe Connect onboarding link
+ */
+export const useCreatePractitionerPaymentOnboardingLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getCreatePractitionerPaymentOnboardingLinkMutationOptions(options));
+    }
+
 export const getGetPractitionerCalendarUrl = (params: GetPractitionerCalendarParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -2785,6 +2941,229 @@ export const useActOnAppointment = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getActOnAppointmentMutationOptions(options));
+    }
+
+export const getCreateAppointmentCheckoutUrl = (appointmentId: string,) => {
+
+
+
+
+  return `/api/appointments/${appointmentId}/checkout`
+}
+
+/**
+ * Checkout is available only after practitioner acceptance. The server supplies the configured success and cancellation destinations.
+ * @summary Create or reuse hosted checkout for an accepted appointment
+ */
+export const createAppointmentCheckout = async (appointmentId: string,
+    paymentCheckoutInput: PaymentCheckoutInput, options?: Parameters<typeof customFetch>[1]): Promise<CheckoutSessionResponse> => {
+
+  return customFetch<CheckoutSessionResponse>(getCreateAppointmentCheckoutUrl(appointmentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentCheckoutInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAppointmentCheckoutMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAppointmentCheckout>>, TError,{appointmentId: string;data: BodyType<PaymentCheckoutInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAppointmentCheckout>>, TError,{appointmentId: string;data: BodyType<PaymentCheckoutInput>}, TContext> => {
+
+const mutationKey = ['createAppointmentCheckout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAppointmentCheckout>>, {appointmentId: string;data: BodyType<PaymentCheckoutInput>}> = (props) => {
+          const {appointmentId,data} = props ?? {};
+
+          return  createAppointmentCheckout(appointmentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAppointmentCheckoutMutationResult = NonNullable<Awaited<ReturnType<typeof createAppointmentCheckout>>>
+    export type CreateAppointmentCheckoutMutationBody = BodyType<PaymentCheckoutInput>
+    export type CreateAppointmentCheckoutMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create or reuse hosted checkout for an accepted appointment
+ */
+export const useCreateAppointmentCheckout = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAppointmentCheckout>>, TError,{appointmentId: string;data: BodyType<PaymentCheckoutInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAppointmentCheckout>>,
+        TError,
+        {appointmentId: string;data: BodyType<PaymentCheckoutInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAppointmentCheckoutMutationOptions(options));
+    }
+
+export const getGetAppointmentPaymentUrl = (appointmentId: string,) => {
+
+
+
+
+  return `/api/appointments/${appointmentId}/payment`
+}
+
+/**
+ * @summary Payment state for an appointment
+ */
+export const getAppointmentPayment = async (appointmentId: string, options?: Parameters<typeof customFetch>[1]): Promise<PaymentSummary> => {
+
+  return customFetch<PaymentSummary>(getGetAppointmentPaymentUrl(appointmentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAppointmentPaymentQueryKey = (appointmentId: string,) => {
+    return [
+    `/api/appointments/${appointmentId}/payment`
+    ] as const;
+    }
+
+
+export const getGetAppointmentPaymentQueryOptions = <TData = Awaited<ReturnType<typeof getAppointmentPayment>>, TError = ErrorType<unknown>>(appointmentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppointmentPayment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAppointmentPaymentQueryKey(appointmentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAppointmentPayment>>> = ({ signal }) => getAppointmentPayment(appointmentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: appointmentId !== null && appointmentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAppointmentPayment>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAppointmentPaymentQueryResult = NonNullable<Awaited<ReturnType<typeof getAppointmentPayment>>>
+export type GetAppointmentPaymentQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Payment state for an appointment
+ */
+
+export function useGetAppointmentPayment<TData = Awaited<ReturnType<typeof getAppointmentPayment>>, TError = ErrorType<unknown>>(
+ appointmentId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAppointmentPayment>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAppointmentPaymentQueryOptions(appointmentId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAppointmentRefundUrl = (appointmentId: string,) => {
+
+
+
+
+  return `/api/appointments/${appointmentId}/refunds`
+}
+
+/**
+ * Cancellations before the practitioner's notice window receive a full refund. Late cancellations are not refunded automatically.
+ * @summary Request a full appointment refund
+ */
+export const createAppointmentRefund = async (appointmentId: string,
+    paymentRefundInput: PaymentRefundInput, options?: Parameters<typeof customFetch>[1]): Promise<RefundSummary> => {
+
+  return customFetch<RefundSummary>(getCreateAppointmentRefundUrl(appointmentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentRefundInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAppointmentRefundMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAppointmentRefund>>, TError,{appointmentId: string;data: BodyType<PaymentRefundInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAppointmentRefund>>, TError,{appointmentId: string;data: BodyType<PaymentRefundInput>}, TContext> => {
+
+const mutationKey = ['createAppointmentRefund'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAppointmentRefund>>, {appointmentId: string;data: BodyType<PaymentRefundInput>}> = (props) => {
+          const {appointmentId,data} = props ?? {};
+
+          return  createAppointmentRefund(appointmentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAppointmentRefundMutationResult = NonNullable<Awaited<ReturnType<typeof createAppointmentRefund>>>
+    export type CreateAppointmentRefundMutationBody = BodyType<PaymentRefundInput>
+    export type CreateAppointmentRefundMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Request a full appointment refund
+ */
+export const useCreateAppointmentRefund = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAppointmentRefund>>, TError,{appointmentId: string;data: BodyType<PaymentRefundInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAppointmentRefund>>,
+        TError,
+        {appointmentId: string;data: BodyType<PaymentRefundInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAppointmentRefundMutationOptions(options));
     }
 
 export const getGetAppointmentCalendarFileUrl = (appointmentId: string,) => {

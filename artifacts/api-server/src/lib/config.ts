@@ -1,3 +1,5 @@
+import { paymentPolicy } from "./paymentPolicy";
+
 import type { ModalityInfo } from "@workspace/api-zod";
 
 /**
@@ -5,7 +7,7 @@ import type { ModalityInfo } from "@workspace/api-zod";
  * shaped for Stripe Connect) but switched off for the MVP. No card data is
  * collected or stored anywhere in this codebase.
  */
-export const PAYMENTS_ENABLED = process.env["PAYMENTS_ENABLED"] === "true";
+export const PAYMENTS_ENABLED = paymentPolicy.enabled;
 
 export const DEFAULT_CURRENCY = "USD";
 

@@ -601,6 +601,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /practitioner/payments:
+    get:
+      operationId: listPractitionerPayments
+      tags: [practitioner]
+      summary: Payments for the signed-in practitioner
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Payment account readiness and payments, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerPayments"
+
+  /practitioner/payments/onboarding-link:
+    post:
+      operationId: createPractitionerPaymentOnboardingLink
+      tags: [practitioner]
+      summary: Create a hosted Stripe Connect onboarding link
+      description: >-
+        The server supplies its configured refresh and return destinations;
+        clients cannot override either URL.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Hosted onboarding link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAccountLink"
+
   /practitioner/calendar:
     get:
       operationId: getPractitionerCalendar
@@ -702,6 +735,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/checkout:
+    post:
+      operationId: createAppointmentCheckout
+      tags: [appointments]
+      summary: Create or reuse hosted checkout for an accepted appointment
+      description: >-
+        Checkout is available only after practitioner acceptance. The server
+        supplies the configured success and cancellation destinations.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentCheckoutInput"
+      responses:
+        "200":
+          description: Hosted checkout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSessionResponse"
+
+  /appointments/{appointmentId}/payment:
+    get:
+      operationId: getAppointmentPayment
+      tags: [appointments]
+      summary: Payment state for an appointment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      responses:
+        "200":
+          description: Appointment payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentSummary"
+
+  /appointments/{appointmentId}/refunds:
+    post:
+      operationId: createAppointmentRefund
+      tags: [appointments]
+      summary: Request a full appointment refund
+      description: >-
+        Cancellations before the practitioner's notice window receive a full
+        refund. Late cancellations are not refunded automatically.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRefundInput"
+      responses:
+        "201":
+          description: Refund requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundSummary"
 
   /appointments/{appointmentId}/ics:
     get:
@@ -902,6 +1004,10 @@ paths:
                 $ref: "#/components/schemas/Review"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
   parameters:
     PractitionerId:
       name: practitionerId
@@ -997,6 +1103,28 @@ components:
     AppointmentStatus:
       type: string
       enum: [pending, confirmed, completed, cancelled, declined]
+
+    PractitionerPaymentStatus:
+      type: string
+      enum:
+        - checkout_available
+        - not_required
+        - unavailable
+        - checkout_pending
+        - processing
+        - paid
+        - partially_refunded
+        - refunded
+        - failed
+        - cancelled
+
+    PaymentAccountStatus:
+      type: string
+      enum: [feature_disabled, policy_unavailable, onboarding_required, pending, restricted, ready]
+
+    RefundStatus:
+      type: string
+      enum: [pending, succeeded, failed, cancelled]
 
     AppointmentScope:
       type: string
@@ -1778,6 +1906,10 @@ components:
           type: boolean
         hasReview:
           type: boolean
+        payment:
+          oneOf:
+            - $ref: "#/components/schemas/PaymentSummary"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -1802,7 +1934,157 @@ components:
         - viewerRole
         - canReview
         - hasReview
+        - payment
         - createdAt
+
+    PaymentSummary:
+      type: object
+      properties:
+        id:
+          type: ["string", "null"]
+          format: uuid
+        appointmentId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/PractitionerPaymentStatus"
+        message:
+          type: ["string", "null"]
+        grossAmountCents:
+          type: integer
+        platformFeeCents:
+          type: integer
+        platformFeeBasisPoints:
+          type: integer
+          description: Platform fee policy captured when checkout was created.
+        practitionerNetCents:
+          type: integer
+        currency:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        refundedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - appointmentId
+        - status
+        - message
+        - grossAmountCents
+        - platformFeeCents
+        - platformFeeBasisPoints
+        - practitionerNetCents
+        - currency
+        - paidAt
+        - refundedAt
+        - createdAt
+
+    PractitionerPayments:
+      type: object
+      properties:
+        accountStatus:
+          $ref: "#/components/schemas/PaymentAccountStatus"
+        message:
+          type: string
+        country:
+          type: ["string", "null"]
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentSummary"
+      required: [accountStatus, message, country, payments]
+
+    CheckoutSessionResponse:
+      type: object
+      properties:
+        payment:
+          $ref: "#/components/schemas/PaymentSummary"
+        checkoutUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - payment
+        - checkoutUrl
+        - expiresAt
+
+    RefundSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        status:
+          $ref: "#/components/schemas/RefundStatus"
+        reason:
+          type: ["string", "null"]
+        refundedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - paymentId
+        - amountCents
+        - currency
+        - status
+        - reason
+        - refundedAt
+        - createdAt
+
+    PaymentAccountLink:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/PaymentAccountStatus"
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - status
+        - url
+        - expiresAt
+
+    PaymentCheckoutInput:
+      type: object
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required:
+        - idempotencyKey
+
+    PaymentRefundInput:
+      type: object
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+        reason:
+          type: ["string", "null"]
+      required:
+        - idempotencyKey
 
     BookingRequest:
       type: object

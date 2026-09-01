@@ -69,6 +69,7 @@ function RootLayoutNav() {
         <Stack.Screen name="manage/services" options={{ title: 'Services' }} />
         <Stack.Screen name="manage/availability" options={{ title: 'Availability' }} />
         <Stack.Screen name="manage/policy" options={{ title: 'Booking rules' }} />
+        <Stack.Screen name="manage/payments" options={{ title: 'Payments' }} />
         <Stack.Screen name="account" options={{ title: 'Your details' }} />
       </Stack>
     </>

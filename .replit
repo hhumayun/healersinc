@@ -37,3 +37,10 @@ externalPort = 80
 [[ports]]
 localPort = 25408
 externalPort = 3001
+
+[userenv]
+
+[userenv.shared]
+PAYMENTS_ENABLED = "true"
+PAYMENT_PLATFORM_FEE_BPS = "1000"
+PAYMENT_SUPPORTED_COUNTRIES = "CA,US,GB,AU"

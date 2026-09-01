@@ -4,9 +4,11 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
   getGetPractitionerDashboardQueryKey,
+  getListPractitionerPaymentsQueryKey,
   getListAppointmentsQueryKey,
   useActOnAppointment,
   useGetPractitionerDashboard,
+  useListPractitionerPayments,
   useListAppointments,
   type Appointment,
 } from '@workspace/api-client-react';
@@ -230,20 +232,32 @@ export default function DashboardScreen() {
 
   const dashboard = useGetPractitionerDashboard();
   const pending = useListAppointments({ scope: 'pending' });
+  const paymentStatus = useListPractitionerPayments({
+    query: { queryKey: getListPractitionerPaymentsQueryKey() },
+  });
 
   const onRefresh = useCallback(() => {
     void dashboard.refetch();
     void pending.refetch();
-  }, [dashboard, pending]);
+    void paymentStatus.refetch();
+  }, [dashboard, pending, paymentStatus]);
 
   const summary = dashboard.data;
   const needsProfile =
     !!summary && (!summary.isPublished || summary.profileCompletion < 100);
+  const needsPaymentSetup =
+    paymentStatus.data?.accountStatus === 'onboarding_required' ||
+    paymentStatus.data?.accountStatus === 'pending' ||
+    paymentStatus.data?.accountStatus === 'restricted';
 
   return (
     <ScreenScroll
       onRefresh={onRefresh}
-      refreshing={dashboard.isRefetching || pending.isRefetching}
+      refreshing={
+        dashboard.isRefetching ||
+        pending.isRefetching ||
+        paymentStatus.isRefetching
+      }
     >
       <ScreenHeader
         title="Your practice"
@@ -380,6 +394,32 @@ export default function DashboardScreen() {
               </View>
             </Card>
           )}
+
+          {needsPaymentSetup ? (
+            <Card
+              variant="outline"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: space(3),
+              }}
+            >
+              <Feather name="credit-card" size={20} color={colors.primary} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="title">Finish payment setup</Text>
+                <Text variant="caption" tone="muted">
+                  Complete the secure hosted setup to accept in-app payments.
+                </Text>
+              </View>
+              <Button
+                title="Open"
+                size="sm"
+                variant="outline"
+                testID="dashboard-payments-nudge"
+                onPress={() => router.push('/manage/payments')}
+              />
+            </Card>
+          ) : null}
 
           <View>
             <SectionTitle title="This month" />

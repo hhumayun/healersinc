@@ -56,3 +56,30 @@ export const notificationTypeEnum = pgEnum("notification_type", [
 
 /** When a reminder fires relative to the appointment start. */
 export const reminderKindEnum = pgEnum("reminder_kind", ["24h", "1h"]);
+
+/** Synchronised state of a practitioner's Stripe Connect account. */
+export const paymentAccountStatusEnum = pgEnum("payment_account_status", [
+  "pending",
+  "restricted",
+  "enabled",
+  "disabled",
+]);
+
+/** Lifecycle of an appointment payment. */
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "checkout_pending",
+  "processing",
+  "paid",
+  "partially_refunded",
+  "refunded",
+  "failed",
+  "cancelled",
+]);
+
+/** Lifecycle of a refund requested against a payment. */
+export const refundStatusEnum = pgEnum("refund_status", [
+  "pending",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
