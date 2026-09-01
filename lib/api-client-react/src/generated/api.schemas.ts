@@ -622,12 +622,21 @@ export interface PaymentAccountLink {
   expiresAt: string;
 }
 
+export type PaymentCheckoutInputReturnTarget = typeof PaymentCheckoutInputReturnTarget[keyof typeof PaymentCheckoutInputReturnTarget];
+
+
+export const PaymentCheckoutInputReturnTarget = {
+  native: 'native',
+  web: 'web',
+} as const;
+
 export interface PaymentCheckoutInput {
   /**
      * @minLength 8
      * @maxLength 128
      */
   idempotencyKey: string;
+  returnTarget: PaymentCheckoutInputReturnTarget;
 }
 
 export interface PaymentRefundInput {

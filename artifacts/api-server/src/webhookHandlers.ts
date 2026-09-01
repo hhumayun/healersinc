@@ -13,6 +13,7 @@ import { getStripeSync } from "./stripeClient";
 import { persistStripeAccount, requestFullRefund } from "./lib/payments";
 import {
   paymentTransitionSources,
+  shouldAutoRefundCapturedPayment,
   type PaymentState,
 } from "./lib/paymentState";
 
@@ -87,9 +88,12 @@ export async function reconcileStripeEvent(event: Stripe.Event): Promise<void> {
   ) {
     const session = event.data.object as Stripe.Checkout.Session;
     const metadataPaymentId = session.metadata?.["paymentId"];
-    const identity = metadataPaymentId
-      ? eq(paymentsTable.id, metadataPaymentId)
-      : eq(paymentsTable.stripeCheckoutSessionId, session.id);
+    const identity =
+      event.type === "checkout.session.expired"
+        ? eq(paymentsTable.stripeCheckoutSessionId, session.id)
+        : metadataPaymentId
+          ? eq(paymentsTable.id, metadataPaymentId)
+          : eq(paymentsTable.stripeCheckoutSessionId, session.id);
     const nextStatus: PaymentState =
       event.type === "checkout.session.completed"
         ? session.payment_status === "paid"
@@ -293,14 +297,22 @@ export async function reconcileStripeEvent(event: Stripe.Event): Promise<void> {
 
   if (capturedPayment) {
     const [appointment] = await db
-      .select({ status: appointmentsTable.status })
+      .select({
+        status: appointmentsTable.status,
+        cancelledLate: appointmentsTable.cancelledLate,
+      })
       .from(appointmentsTable)
       .where(eq(appointmentsTable.id, capturedPayment.appointmentId))
       .limit(1);
-    if (appointment?.status === "cancelled") {
-      // A capture racing with cancellation is always refunded, including when
-      // the original cancellation was late. Reservation is durable; delivery
-      // is performed by the retry worker.
+    if (
+      appointment &&
+      shouldAutoRefundCapturedPayment({
+        appointmentStatus: appointment.status,
+        cancelledLate: appointment.cancelledLate,
+      })
+    ) {
+      // A capture racing with a timely cancellation is still refunded.
+      // Reservation is durable; delivery is performed by the retry worker.
       await requestFullRefund({
         payment: capturedPayment,
         requestedById: null,

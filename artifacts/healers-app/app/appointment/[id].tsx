@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -325,8 +325,14 @@ export default function AppointmentScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, checkout: checkoutReturn } = useLocalSearchParams<{
+    id: string;
+    checkout?: string | string[];
+  }>();
   const appointmentId = id ?? '';
+  const checkoutReturnStatus = Array.isArray(checkoutReturn)
+    ? checkoutReturn[0]
+    : checkoutReturn;
 
   const query = useGetAppointment(appointmentId, {
     query: { enabled: !!appointmentId, queryKey: getGetAppointmentQueryKey(appointmentId) },
@@ -351,6 +357,54 @@ export default function AppointmentScreen() {
     },
   });
   const payment = paymentQuery.data ?? appointment?.payment ?? null;
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !checkoutReturnStatus) return;
+    if (window.opener) {
+      window.opener.postMessage(
+        {
+          type: 'healers.checkout.return',
+          appointmentId,
+          status: checkoutReturnStatus,
+        },
+        window.location.origin,
+      );
+      window.close();
+      return;
+    }
+    if (checkoutReturnStatus === 'success') {
+      setConfirmingPayment(true);
+    }
+  }, [appointmentId, checkoutReturnStatus]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const handleCheckoutReturn = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const message = event.data as {
+        type?: unknown;
+        appointmentId?: unknown;
+        status?: unknown;
+      };
+      if (
+        message.type !== 'healers.checkout.return' ||
+        message.appointmentId !== appointmentId
+      ) {
+        return;
+      }
+      setConfirmingPayment(message.status === 'success');
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getGetAppointmentQueryKey(appointmentId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getGetAppointmentPaymentQueryKey(appointmentId),
+        }),
+      ]);
+    };
+    window.addEventListener('message', handleCheckoutReturn);
+    return () => window.removeEventListener('message', handleCheckoutReturn);
+  }, [appointmentId, queryClient]);
 
   useEffect(() => {
     if (
@@ -434,10 +488,23 @@ export default function AppointmentScreen() {
 
   const handleCheckout = () => {
     setActionError(null);
+    const checkoutWindow =
+      Platform.OS === 'web'
+        ? window.open('about:blank', 'healers-checkout', 'popup,width=520,height=760')
+        : null;
+    if (Platform.OS === 'web' && !checkoutWindow) {
+      setActionError(
+        'Checkout was blocked by the browser. Allow popups for Healers and try again.',
+      );
+      return;
+    }
     checkout.mutate(
       {
         appointmentId,
-        data: { idempotencyKey: makeIdempotencyKey() },
+        data: {
+          idempotencyKey: makeIdempotencyKey(),
+          returnTarget: Platform.OS === 'web' ? 'web' : 'native',
+        },
       },
       {
         onSuccess: async (session) => {
@@ -446,6 +513,11 @@ export default function AppointmentScreen() {
             session.payment,
           );
           try {
+            if (Platform.OS === 'web') {
+              setConfirmingPayment(true);
+              checkoutWindow?.location.assign(session.checkoutUrl);
+              return;
+            }
             const returnUrl = Linking.createURL(`/appointment/${appointmentId}`);
             const browserSession = WebBrowser.openAuthSessionAsync(
               session.checkoutUrl,
@@ -462,7 +534,10 @@ export default function AppointmentScreen() {
             setActionError(errorInfo(error).message);
           }
         },
-        onError: (error) => setActionError(errorInfo(error).message),
+        onError: (error) => {
+          checkoutWindow?.close();
+          setActionError(errorInfo(error).message);
+        },
       },
     );
   };

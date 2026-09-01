@@ -5,6 +5,7 @@ import {
   classifyUnpaidPayment,
   refundProviderIdempotencyKey,
   paymentTransitionAllowed,
+  shouldAutoRefundCapturedPayment,
 } from "./paymentState";
 
 test("pending appointments never advertise checkout", () => {
@@ -69,7 +70,33 @@ test("refund state cannot regress when success or completion arrives later", () 
 test("stale failure or expiration cannot regress a paid payment", () => {
   assert.equal(paymentTransitionAllowed("paid", "failed"), false);
   assert.equal(paymentTransitionAllowed("paid", "cancelled"), false);
-  assert.equal(paymentTransitionAllowed("processing", "failed"), false);
+  assert.equal(paymentTransitionAllowed("processing", "failed"), true);
+  assert.equal(paymentTransitionAllowed("processing", "cancelled"), true);
+  assert.equal(paymentTransitionAllowed("failed", "paid"), true);
   assert.equal(paymentTransitionAllowed("paid", "partially_refunded"), true);
   assert.equal(paymentTransitionAllowed("partially_refunded", "refunded"), true);
+});
+
+test("capture after cancellation only auto-refunds before the notice cutoff", () => {
+  assert.equal(
+    shouldAutoRefundCapturedPayment({
+      appointmentStatus: "cancelled",
+      cancelledLate: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldAutoRefundCapturedPayment({
+      appointmentStatus: "cancelled",
+      cancelledLate: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldAutoRefundCapturedPayment({
+      appointmentStatus: "confirmed",
+      cancelledLate: false,
+    }),
+    false,
+  );
 });

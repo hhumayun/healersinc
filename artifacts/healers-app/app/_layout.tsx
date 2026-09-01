@@ -59,6 +59,7 @@ function RootLayoutNav() {
         />
         <Stack.Screen name="book/[practitionerId]" options={{ title: 'Book a session' }} />
         <Stack.Screen name="appointment/[id]" options={{ title: 'Session' }} />
+        <Stack.Screen name="checkout-return" options={{ headerShown: false }} />
         <Stack.Screen name="conversation/[id]" options={{ title: 'Chat' }} />
         <Stack.Screen
           name="review/[appointmentId]"

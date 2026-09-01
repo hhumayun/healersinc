@@ -80,26 +80,37 @@ export const paymentStates = [
 
 export type PaymentState = (typeof paymentStates)[number];
 
-const paymentStateRank: Record<PaymentState, number> = {
-  checkout_pending: 0,
-  failed: 1,
-  cancelled: 1,
-  processing: 2,
-  paid: 3,
-  partially_refunded: 4,
-  refunded: 5,
+const allowedPaymentTransitions: Record<PaymentState, readonly PaymentState[]> = {
+  checkout_pending: paymentStates,
+  // A failed or expired PaymentIntent can still be retried or have a delayed
+  // capture/refund event arrive afterward.
+  failed: paymentStates,
+  cancelled: paymentStates,
+  // Asynchronous payment methods can legitimately fail after first entering
+  // processing. Paid/refunded money states remain monotonic below.
+  processing: paymentStates,
+  paid: ["paid", "partially_refunded", "refunded"],
+  partially_refunded: ["partially_refunded", "refunded"],
+  refunded: ["refunded"],
 };
 
-/** Provider events may advance money state, but can never regress it. */
+/** Provider events may resolve unsettled states, but settled money cannot regress. */
 export function paymentTransitionAllowed(
   current: PaymentState,
   next: PaymentState,
 ): boolean {
-  return paymentStateRank[next] >= paymentStateRank[current];
+  return allowedPaymentTransitions[current].includes(next);
 }
 
 export function paymentTransitionSources(next: PaymentState): PaymentState[] {
   return paymentStates.filter((current) =>
     paymentTransitionAllowed(current, next),
   );
+}
+
+export function shouldAutoRefundCapturedPayment(input: {
+  appointmentStatus: BookableAppointmentStatus;
+  cancelledLate: boolean;
+}): boolean {
+  return input.appointmentStatus === "cancelled" && !input.cancelledLate;
 }

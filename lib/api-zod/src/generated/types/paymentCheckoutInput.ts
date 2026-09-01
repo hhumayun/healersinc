@@ -5,6 +5,7 @@
  * Healers Inc marketplace API. Every timestamp crossing this boundary is a UTC instant (RFC 3339 with a `Z` suffix); wall-clock rendering is always derived from an IANA time zone supplied alongside it. Errors are returned as `{ "error": string, "message": string }` with a 4xx/5xx status.
  * OpenAPI spec version: 0.1.0
  */
+import type { PaymentCheckoutInputReturnTarget } from './paymentCheckoutInputReturnTarget';
 
 export interface PaymentCheckoutInput {
   /**
@@ -12,4 +13,5 @@ export interface PaymentCheckoutInput {
      * @maxLength 128
      */
   idempotencyKey: string;
+  returnTarget: PaymentCheckoutInputReturnTarget;
 }

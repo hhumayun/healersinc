@@ -26,7 +26,15 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- `lib/db/src/schema/` is the application schema source of truth. Development
+  and post-merge setup use Drizzle `push`; production schema diffs are applied
+  by Replit Publish before the new application starts. Do not run application
+  schema pushes at API startup or mix them with StripeSync's separate managed
+  `stripe`-schema migrations.
+- Native Stripe Checkout returns through fixed API handlers into the
+  `healers-app://` scheme. Expo web Checkout uses the server-allowlisted
+  `PAYMENT_WEB_RETURN_BASE_URL`; development automatically uses
+  `REPLIT_EXPO_DEV_DOMAIN`.
 
 ## Product
 

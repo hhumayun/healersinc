@@ -248,7 +248,8 @@ export async function createCheckout(input: {
   appointment: Appointment;
   account: PractitionerPaymentAccount;
   clientEmail: string;
-  baseUrl: string;
+  successUrl: string;
+  cancelUrl: string;
 }): Promise<{ payment: Payment; checkoutUrl: string; expiresAt: Date }> {
   const fee = calculateFee(input.appointment.servicePriceCents);
   const localKey = `appointment:${input.appointment.id}`;
@@ -289,11 +290,17 @@ export async function createCheckout(input: {
         payment.stripeCheckoutSessionId,
       );
       if (existing.status === "open" && existing.url) {
-        return {
-          payment,
-          checkoutUrl: existing.url,
-          expiresAt: new Date(existing.expires_at * 1000),
-        };
+        if (
+          existing.success_url === input.successUrl &&
+          existing.cancel_url === input.cancelUrl
+        ) {
+          return {
+            payment,
+            checkoutUrl: existing.url,
+            expiresAt: new Date(existing.expires_at * 1000),
+          };
+        }
+        await stripe.checkout.sessions.expire(existing.id);
       }
       if (existing.status === "complete") {
         throw conflict("This appointment already has a completed checkout.");
@@ -311,8 +318,8 @@ export async function createCheckout(input: {
         mode: "payment",
         customer_email: input.clientEmail,
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: `${input.baseUrl}/api/payments/checkout/success?appointmentId=${input.appointment.id}`,
-        cancel_url: `${input.baseUrl}/api/payments/checkout/cancel?appointmentId=${input.appointment.id}`,
+        success_url: input.successUrl,
+        cancel_url: input.cancelUrl,
         metadata: {
           appointmentId: input.appointment.id,
           paymentId: payment.id,

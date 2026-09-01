@@ -1340,7 +1340,7 @@ export const ActOnAppointmentResponse = zod.object({
 
 
 /**
- * Checkout is available only after practitioner acceptance. The server supplies the configured success and cancellation destinations.
+ * Checkout is available only after practitioner acceptance. The server supplies allowlisted native or web success and cancellation destinations based on the requested return target.
  * @summary Create or reuse hosted checkout for an accepted appointment
  */
 export const CreateAppointmentCheckoutParams = zod.object({
@@ -1353,7 +1353,8 @@ export const createAppointmentCheckoutBodyIdempotencyKeyMax = 128;
 
 
 export const CreateAppointmentCheckoutBody = zod.object({
-  "idempotencyKey": zod.string().min(createAppointmentCheckoutBodyIdempotencyKeyMin).max(createAppointmentCheckoutBodyIdempotencyKeyMax)
+  "idempotencyKey": zod.string().min(createAppointmentCheckoutBodyIdempotencyKeyMin).max(createAppointmentCheckoutBodyIdempotencyKeyMax),
+  "returnTarget": zod.enum(['native', 'web'])
 })
 
 export const CreateAppointmentCheckoutResponse = zod.object({

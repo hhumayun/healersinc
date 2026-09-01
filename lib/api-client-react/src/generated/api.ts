@@ -2952,7 +2952,7 @@ export const getCreateAppointmentCheckoutUrl = (appointmentId: string,) => {
 }
 
 /**
- * Checkout is available only after practitioner acceptance. The server supplies the configured success and cancellation destinations.
+ * Checkout is available only after practitioner acceptance. The server supplies allowlisted native or web success and cancellation destinations based on the requested return target.
  * @summary Create or reuse hosted checkout for an accepted appointment
  */
 export const createAppointmentCheckout = async (appointmentId: string,

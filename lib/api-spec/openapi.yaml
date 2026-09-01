@@ -743,7 +743,8 @@ paths:
       summary: Create or reuse hosted checkout for an accepted appointment
       description: >-
         Checkout is available only after practitioner acceptance. The server
-        supplies the configured success and cancellation destinations.
+        supplies allowlisted native or web success and cancellation
+        destinations based on the requested return target.
       security:
         - bearerAuth: []
       parameters:
@@ -2071,8 +2072,14 @@ components:
           type: string
           minLength: 8
           maxLength: 128
+        returnTarget:
+          type: string
+          enum:
+            - native
+            - web
       required:
         - idempotencyKey
+        - returnTarget
 
     PaymentRefundInput:
       type: object
