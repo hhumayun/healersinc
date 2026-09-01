@@ -44,7 +44,7 @@ import {
   createCheckout,
   loadPaymentAccount,
   loadPaymentForAppointment,
-  persistStripeAccount,
+  refreshStripePaymentAccount,
   requestFullRefund,
   toPaymentSummary,
   toRefundSummary,
@@ -578,9 +578,10 @@ router.post(
     let account = await loadPaymentAccount(appointment.practitionerId);
     if (!account) throw conflict("This practitioner is not ready to accept payments.");
     const stripe = await getUncachableStripeClient();
-    account = await persistStripeAccount(
+    account = await refreshStripePaymentAccount(
       appointment.practitionerId,
-      await stripe.accounts.retrieve(account.stripeAccountId),
+      account,
+      stripe,
     );
     if (!countryIsEligible(account.country) || !accountReady(account)) {
       throw conflict("This practitioner is not ready to accept payments.");

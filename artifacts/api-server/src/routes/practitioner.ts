@@ -42,10 +42,15 @@ import { toAppointment, toAvailabilityException, toService } from "../lib/serial
 import { getUncachableStripeClient } from "../stripeClient";
 import {
   loadPaymentAccount,
-  persistStripeAccount,
+  persistStripeV2Account,
   publicAccountStatus,
+  refreshStripePaymentAccount,
   toPaymentSummary,
 } from "../lib/payments";
+import {
+  v2RecipientAccountCreateParams,
+  v2RecipientAccountLinkParams,
+} from "../lib/stripeAccountState";
 import {
   countryIsEligible,
   normalizeCountry,
@@ -454,10 +459,7 @@ router.get(
     let account = await loadPaymentAccount(auth.user.id);
     if (paymentPolicy.enabled && account) {
       const stripe = await getUncachableStripeClient();
-      account = await persistStripeAccount(
-        auth.user.id,
-        await stripe.accounts.retrieve(account.stripeAccountId),
-      );
+      account = await refreshStripePaymentAccount(auth.user.id, account, stripe);
     }
     const accountStatus = publicAccountStatus(
       account?.country ?? auth.user.country,
@@ -500,36 +502,45 @@ router.post(
       throw conflict("Card payments are unavailable for this country.");
     }
     let account = await loadPaymentAccount(auth.user.id);
-    let link;
+    let linkUrl: string;
+    let linkExpiresAt: Date;
     try {
+      const isNewAccount = !account;
       if (!account) {
-        const created = await stripe.accounts.create(
-          {
-            type: "express",
-            country,
+        const created = await stripe.v2.core.accounts.create(
+          v2RecipientAccountCreateParams({
+            practitionerId: auth.user.id,
             email: auth.user.email,
-            capabilities: {
-              card_payments: { requested: true },
-              transfers: { requested: true },
-            },
-            metadata: { practitionerId: auth.user.id },
-          },
+            country,
+          }),
           { idempotencyKey: `connect-account:${auth.user.id}` },
         );
-        account = await persistStripeAccount(auth.user.id, created);
+        account = await persistStripeV2Account(auth.user.id, created);
       } else {
-        account = await persistStripeAccount(
-          auth.user.id,
-          await stripe.accounts.retrieve(account.stripeAccountId),
-        );
+        account = await refreshStripePaymentAccount(auth.user.id, account, stripe);
       }
       const baseUrl = `https://${domain}`;
-      link = await stripe.accountLinks.create({
-        account: account.stripeAccountId,
-        type: "account_onboarding",
-        return_url: `${baseUrl}/api/payments/onboarding/return`,
-        refresh_url: `${baseUrl}/api/payments/onboarding/refresh`,
-      });
+      if (account.accountApiVersion === "v2") {
+        const link = await stripe.v2.core.accountLinks.create(
+          v2RecipientAccountLinkParams({
+            accountId: account.stripeAccountId,
+            onboarding: isNewAccount,
+            returnUrl: `${baseUrl}/api/payments/onboarding/return`,
+            refreshUrl: `${baseUrl}/api/payments/onboarding/refresh`,
+          }),
+        );
+        linkUrl = link.url;
+        linkExpiresAt = new Date(link.expires_at);
+      } else {
+        const link = await stripe.accountLinks.create({
+          account: account.stripeAccountId,
+          type: "account_onboarding",
+          return_url: `${baseUrl}/api/payments/onboarding/return`,
+          refresh_url: `${baseUrl}/api/payments/onboarding/refresh`,
+        });
+        linkUrl = link.url;
+        linkExpiresAt = new Date(link.expires_at * 1000);
+      }
     } catch (error) {
       if (isStripeConnectNotConfigured(error)) {
         throw conflict(
@@ -542,8 +553,8 @@ router.post(
     res.json(
       CreatePractitionerPaymentOnboardingLinkResponse.parse({
         status: publicAccountStatus(country, account).status,
-        url: link.url,
-        expiresAt: new Date(link.expires_at * 1000),
+        url: linkUrl,
+        expiresAt: linkExpiresAt,
       }),
     );
   }),

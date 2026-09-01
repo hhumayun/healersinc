@@ -30,6 +30,12 @@ import {
   refundProviderIdempotencyKey,
   type UnpaidPaymentAvailability,
 } from "./paymentState";
+import {
+  projectedAccountReady,
+  projectV1StripeAccount,
+  projectV2StripeAccount,
+  type StripeAccountProjection,
+} from "./stripeAccountState";
 
 export {
   checkoutProviderIdempotencyKey,
@@ -88,65 +94,68 @@ export function toRefundSummary(refund: Refund): RefundSummary {
   };
 }
 
-function accountDbStatus(account: Stripe.Account): PractitionerPaymentAccount["status"] {
-  if (account.charges_enabled && account.payouts_enabled && account.details_submitted) {
-    return "enabled";
-  }
-  if (
-    account.requirements?.disabled_reason ||
-    account.capabilities?.card_payments === "inactive" ||
-    account.capabilities?.transfers === "inactive"
-  ) {
-    return "restricted";
-  }
-  return "pending";
-}
-
-export async function persistStripeAccount(
+async function persistAccountProjection(
   practitionerId: string,
-  account: Stripe.Account,
+  projection: StripeAccountProjection,
 ): Promise<PractitionerPaymentAccount> {
-  if (!account.country) throw new Error("Stripe account did not provide a country.");
-  const country = normalizeCountry(account.country) ?? account.country.toUpperCase();
   const [saved] = await db
     .insert(practitionerPaymentAccountsTable)
     .values({
       practitionerId,
-      stripeAccountId: account.id,
-      country,
-      status: accountDbStatus(account),
-      chargesEnabled: account.charges_enabled,
-      payoutsEnabled: account.payouts_enabled,
-      detailsSubmitted: account.details_submitted,
-      capabilities: account.capabilities ?? {},
-      requirements: {
-        currentlyDue: account.requirements?.currently_due ?? [],
-        eventuallyDue: account.requirements?.eventually_due ?? [],
-        disabledReason: account.requirements?.disabled_reason ?? null,
-      },
+      ...projection,
       lastSyncedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: practitionerPaymentAccountsTable.practitionerId,
       set: {
-        stripeAccountId: account.id,
-        country,
-        status: accountDbStatus(account),
-        chargesEnabled: account.charges_enabled,
-        payoutsEnabled: account.payouts_enabled,
-        detailsSubmitted: account.details_submitted,
-        capabilities: account.capabilities ?? {},
-        requirements: {
-          currentlyDue: account.requirements?.currently_due ?? [],
-          eventuallyDue: account.requirements?.eventually_due ?? [],
-          disabledReason: account.requirements?.disabled_reason ?? null,
-        },
+        ...projection,
         lastSyncedAt: new Date(),
       },
     })
     .returning();
   if (!saved) throw new Error("Could not persist payment account.");
   return saved;
+}
+
+export function persistStripeAccount(
+  practitionerId: string,
+  account: Stripe.Account,
+): Promise<PractitionerPaymentAccount> {
+  return persistAccountProjection(practitionerId, projectV1StripeAccount(account));
+}
+
+export function persistStripeV2Account(
+  practitionerId: string,
+  account: Stripe.V2.Core.Account,
+): Promise<PractitionerPaymentAccount> {
+  return persistAccountProjection(practitionerId, projectV2StripeAccount(account));
+}
+
+export async function refreshStripePaymentAccount(
+  practitionerId: string,
+  account: PractitionerPaymentAccount,
+  stripe?: Stripe,
+): Promise<PractitionerPaymentAccount> {
+  const client = stripe ?? (await getUncachableStripeClient());
+  if (account.accountApiVersion === "v2") {
+    const providerAccount = await client.v2.core.accounts.retrieve(
+      account.stripeAccountId,
+      {
+        include: [
+          "configuration.merchant",
+          "configuration.recipient",
+          "identity",
+          "requirements",
+          "future_requirements",
+        ],
+      },
+    );
+    return persistStripeV2Account(practitionerId, providerAccount);
+  }
+  return persistStripeAccount(
+    practitionerId,
+    await client.accounts.retrieve(account.stripeAccountId),
+  );
 }
 
 export function publicAccountStatus(
@@ -197,15 +206,7 @@ export async function loadPaymentAccount(
 }
 
 export function accountReady(account: PractitionerPaymentAccount): boolean {
-  const capabilities = account.capabilities as Record<string, unknown>;
-  return (
-    account.status === "enabled" &&
-    account.detailsSubmitted &&
-    account.chargesEnabled &&
-    account.payoutsEnabled &&
-    capabilities["card_payments"] === "active" &&
-    capabilities["transfers"] === "active"
-  );
+  return projectedAccountReady(account);
 }
 
 async function reusablePrice(

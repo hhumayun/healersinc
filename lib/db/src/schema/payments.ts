@@ -30,6 +30,8 @@ export const practitionerPaymentAccountsTable = pgTable(
       .primaryKey()
       .references(() => usersTable.id, { onDelete: "cascade" }),
     stripeAccountId: text("stripe_account_id").notNull(),
+    /** Stripe Accounts API generation. Existing rows are v1 unless migrated explicitly. */
+    accountApiVersion: text("account_api_version").notNull().default("v1"),
     country: text("country").notNull(),
     status: paymentAccountStatusEnum("status").notNull().default("pending"),
     chargesEnabled: boolean("charges_enabled").notNull().default(false),
