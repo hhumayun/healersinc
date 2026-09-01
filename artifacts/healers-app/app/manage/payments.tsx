@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -125,6 +125,13 @@ export default function PaymentsScreen() {
     onboarding.mutate(undefined, {
       onSuccess: async (link) => {
         try {
+          if (Platform.OS === 'web') {
+            // Mobile browsers block popups opened after the onboarding-link
+            // request completes. Same-tab navigation is not subject to that
+            // restriction, and Stripe returns through our configured URL.
+            window.location.assign(link.url);
+            return;
+          }
           const returnUrl = Linking.createURL('/manage/payments');
           await WebBrowser.openAuthSessionAsync(link.url, returnUrl);
           await payments.refetch();
