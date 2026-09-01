@@ -195,7 +195,6 @@ export function v2RecipientAccountCreateParams(input: {
 
 export function v2RecipientAccountLinkParams(input: {
   accountId: string;
-  onboarding: boolean;
   returnUrl: string;
   refreshUrl: string;
 }): Stripe.V2.Core.AccountLinkCreateParams {
@@ -212,8 +211,9 @@ export function v2RecipientAccountLinkParams(input: {
   };
   return {
     account: input.accountId,
-    use_case: input.onboarding
-      ? { type: "account_onboarding", account_onboarding: flow }
-      : { type: "account_update", account_update: flow },
+    // Express accounts remain Stripe-hosted. Stripe only allows onboarding
+    // links for this responsibility model, including when an existing account
+    // returns later to finish or refresh restricted requirements.
+    use_case: { type: "account_onboarding", account_onboarding: flow },
   };
 }

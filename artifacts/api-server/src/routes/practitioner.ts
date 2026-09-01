@@ -505,7 +505,6 @@ router.post(
     let linkUrl: string;
     let linkExpiresAt: Date;
     try {
-      const isNewAccount = !account;
       if (!account) {
         const created = await stripe.v2.core.accounts.create(
           v2RecipientAccountCreateParams({
@@ -524,7 +523,6 @@ router.post(
         const link = await stripe.v2.core.accountLinks.create(
           v2RecipientAccountLinkParams({
             accountId: account.stripeAccountId,
-            onboarding: isNewAccount,
             returnUrl: `${baseUrl}/api/payments/onboarding/return`,
             refreshUrl: `${baseUrl}/api/payments/onboarding/refresh`,
           }),

@@ -101,7 +101,6 @@ test("v2 account and hosted-link parameters match recipient model", () => {
 
   const link = v2RecipientAccountLinkParams({
     accountId: "acct_v2",
-    onboarding: true,
     returnUrl: "https://example.com/return",
     refreshUrl: "https://example.com/refresh",
   });
@@ -115,15 +114,4 @@ test("v2 account and hosted-link parameters match recipient model", () => {
     future_requirements: "include",
   });
 
-  const updateLink = v2RecipientAccountLinkParams({
-    accountId: "acct_v2",
-    onboarding: false,
-    returnUrl: "https://example.com/return",
-    refreshUrl: "https://example.com/refresh",
-  });
-  assert.equal(updateLink.use_case.type, "account_update");
-  assert.deepEqual(updateLink.use_case.account_update?.configurations, [
-    "merchant",
-    "recipient",
-  ]);
 });
