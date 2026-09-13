@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/healers-inc-web/"
+title = "Healers Inc Web"
+description = "A public two-page web introduction to the Healers Inc wellness marketplace. Care seekers start on the client home page, while prospective practitioners can learn about joining on a dedicated page."
+version = "1.0.0"
+id = "artifacts/healers-inc-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/healers-inc-web/" ]
+localPort = 21379
+
+[services.development]
+run = "pnpm --filter @workspace/healers-inc-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/healers-inc-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/healers-inc-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21379"
+BASE_PATH = "/healers-inc-web/"

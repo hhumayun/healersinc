@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "aWtlxxJyUvwsK2Mk2E80a"
+uri = "file://exports/healers-inc-design-system.zip"
+type = "unspecified"
+title = "Download: Healers Inc Design System ZIP"
+description = "15 MB complete design-system source export."
+logical_id = "a5e954af-2fc9-4060-985b-ffc3c10a6a3f"
+content_hash = "sha256:81de87b39161a93aa0e2d2eb39131c334e9529d45b56dbf69bf8490b09c4acb3"
+size = 14756461
+mtime_ms = 1787192812292
+storage_uri = "gcs://replit-rams-assets-janeway/rams/assets/repl:26ad017c-22a0-4ac4-be15-878770e81d19/a5e954af-2fc9-4060-985b-ffc3c10a6a3f/ee29bde8-4a73-4ef5-967b-2c76f2a0bd2e"
+storage_version_token = "1787192863578463"
+content_type = "application/octet-stream"

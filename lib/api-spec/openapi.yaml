@@ -1,0 +1,2385 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: >-
+    Healers Inc marketplace API. Every timestamp crossing this boundary is a UTC
+    instant (RFC 3339 with a `Z` suffix); wall-clock rendering is always derived
+    from an IANA time zone supplied alongside it. Errors are returned as
+    `{ "error": string, "message": string }` with a 4xx/5xx status.
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Registration, sign-in and practitioner onboarding
+  - name: discovery
+    description: Public practitioner search and profiles
+  - name: practitioner
+    description: Practitioner self-service (profile, services, availability)
+  - name: appointments
+    description: Booking lifecycle
+  - name: messaging
+    description: Conversations and messages
+  - name: notifications
+    description: In-app notification centre
+  - name: reviews
+    description: Post-session reviews
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /config:
+    get:
+      operationId: getAppConfig
+      tags: [health]
+      summary: Client bootstrap configuration
+      responses:
+        "200":
+          description: Configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppConfig"
+
+  /auth/register:
+    post:
+      operationId: registerClient
+      tags: [auth]
+      summary: Create a client account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientRegistration"
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in to a specific portal
+      description: >-
+        `role` selects which side of the marketplace the session opens in. An
+        account holding both roles can sign in to either.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credentials"
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Invalidate the current session
+      responses:
+        "204":
+          description: Signed out
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: The signed-in account
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+
+  /auth/switch-role:
+    post:
+      operationId: switchRole
+      tags: [auth]
+      summary: Move the current session between the client and practitioner portals
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleSelection"
+      responses:
+        "200":
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+
+  /auth/practitioner/start:
+    post:
+      operationId: startPractitionerSignup
+      tags: [auth]
+      summary: Begin practitioner signup and send an email verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PractitionerSignupStart"
+      responses:
+        "201":
+          description: Signup started, verification code sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerSignupState"
+
+  /auth/practitioner/verify:
+    post:
+      operationId: verifyPractitionerEmail
+      tags: [auth]
+      summary: Confirm the emailed verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpVerification"
+      responses:
+        "200":
+          description: Email verified and session issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+
+  /auth/practitioner/resend:
+    post:
+      operationId: resendPractitionerOtp
+      tags: [auth]
+      summary: Send a fresh verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtpResendRequest"
+      responses:
+        "204":
+          description: Code sent
+
+  /auth/practitioner/progress:
+    get:
+      operationId: getPractitionerSignupProgress
+      tags: [auth]
+      summary: Resume an interrupted practitioner signup
+      responses:
+        "200":
+          description: Current wizard state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerSignupState"
+    patch:
+      operationId: updatePractitionerSignupProgress
+      tags: [auth]
+      summary: Save one step of the practitioner signup wizard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PractitionerSignupDraftUpdate"
+      responses:
+        "200":
+          description: Updated wizard state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerSignupState"
+
+  /practitioners:
+    get:
+      operationId: searchPractitioners
+      tags: [discovery]
+      summary: Search, filter and sort published practitioners
+      parameters:
+        - name: query
+          in: query
+          schema:
+            type: string
+          description: Free text over name, headline, bio and tags
+        - name: modality
+          in: query
+          schema:
+            $ref: "#/components/schemas/Modality"
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            $ref: "#/components/schemas/SessionFormat"
+        - name: country
+          in: query
+          schema:
+            type: string
+        - name: minPriceCents
+          in: query
+          schema:
+            type: integer
+        - name: maxPriceCents
+          in: query
+          schema:
+            type: integer
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: timezone
+          in: query
+          description: Viewer IANA zone, used to localise `nextAvailableLabel`
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            $ref: "#/components/schemas/PractitionerSort"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: Matching practitioners
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerSearchPage"
+
+  /practitioners/{practitionerId}:
+    get:
+      operationId: getPractitionerProfile
+      tags: [discovery]
+      summary: Public practitioner profile
+      description: >-
+        Times are localised to the signed-in viewer's stored time zone;
+        anonymous callers see the practitioner's own zone.
+      parameters:
+        - $ref: "#/components/parameters/PractitionerId"
+      responses:
+        "200":
+          description: Practitioner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerPublicProfile"
+
+  /availability:
+    get:
+      operationId: getPractitionerAvailability
+      tags: [discovery]
+      summary: Bookable slots for a service over a date range
+      parameters:
+        - name: practitionerId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: serviceId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          required: true
+          description: First local calendar day to include, `YYYY-MM-DD`
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          description: Last local calendar day to include, `YYYY-MM-DD`
+          schema:
+            type: string
+        - name: timezone
+          in: query
+          required: true
+          description: Viewer IANA zone; slots are labelled in it as well
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityCalendar"
+
+  /practitioners/{practitionerId}/reviews:
+    get:
+      operationId: listPractitionerReviews
+      tags: [reviews]
+      summary: Reviews left for a practitioner
+      parameters:
+        - $ref: "#/components/parameters/PractitionerId"
+      responses:
+        "200":
+          description: Reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+
+  /client/profile:
+    get:
+      operationId: getClientProfile
+      tags: [auth]
+      summary: The signed-in client's profile
+      responses:
+        "200":
+          description: Client profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientProfile"
+    put:
+      operationId: updateClientProfile
+      tags: [auth]
+      summary: Update the signed-in client's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientProfile"
+
+  /practitioner/profile:
+    get:
+      operationId: getMyPractitionerProfile
+      tags: [practitioner]
+      summary: The signed-in practitioner's own profile
+      responses:
+        "200":
+          description: Practitioner profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerProfile"
+    put:
+      operationId: updateMyPractitionerProfile
+      tags: [practitioner]
+      summary: Update the signed-in practitioner's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PractitionerProfileUpdate"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerProfile"
+
+  /practitioner/services:
+    get:
+      operationId: listMyServices
+      tags: [practitioner]
+      summary: Services offered by the signed-in practitioner
+      responses:
+        "200":
+          description: Services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Service"
+    post:
+      operationId: createService
+      tags: [practitioner]
+      summary: Add a service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceDraft"
+      responses:
+        "201":
+          description: Created service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+
+  /practitioner/services/{serviceId}:
+    put:
+      operationId: updateService
+      tags: [practitioner]
+      summary: Update a service
+      parameters:
+        - $ref: "#/components/parameters/ServiceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceDraft"
+      responses:
+        "200":
+          description: Updated service
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+    delete:
+      operationId: deleteService
+      tags: [practitioner]
+      summary: Retire a service
+      parameters:
+        - $ref: "#/components/parameters/ServiceId"
+      responses:
+        "204":
+          description: Deleted
+
+  /practitioner/availability:
+    get:
+      operationId: getMyAvailability
+      tags: [practitioner]
+      summary: Weekly availability pattern
+      responses:
+        "200":
+          description: Weekly schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilitySchedule"
+    put:
+      operationId: updateMyAvailability
+      tags: [practitioner]
+      summary: Replace the weekly availability pattern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilitySchedule"
+      responses:
+        "200":
+          description: Updated schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilitySchedule"
+
+  /practitioner/exceptions:
+    get:
+      operationId: listAvailabilityExceptions
+      tags: [practitioner]
+      summary: One-off schedule changes
+      responses:
+        "200":
+          description: Exceptions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailabilityException"
+    post:
+      operationId: createAvailabilityException
+      tags: [practitioner]
+      summary: Block time off or add extra hours
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityExceptionDraft"
+      responses:
+        "201":
+          description: Created exception
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityException"
+
+  /practitioner/exceptions/{exceptionId}:
+    delete:
+      operationId: deleteAvailabilityException
+      tags: [practitioner]
+      summary: Remove a one-off schedule change
+      parameters:
+        - name: exceptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+
+  /practitioner/booking-policy:
+    put:
+      operationId: updateBookingPolicy
+      tags: [practitioner]
+      summary: Update buffers, notice and cancellation rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingPolicy"
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingPolicy"
+
+  /practitioner/dashboard:
+    get:
+      operationId: getPractitionerDashboard
+      tags: [practitioner]
+      summary: Headline numbers for the practitioner home screen
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /practitioner/payments:
+    get:
+      operationId: listPractitionerPayments
+      tags: [practitioner]
+      summary: Payments for the signed-in practitioner
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Payment account readiness and payments, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PractitionerPayments"
+
+  /practitioner/payments/onboarding-link:
+    post:
+      operationId: createPractitionerPaymentOnboardingLink
+      tags: [practitioner]
+      summary: Create a hosted Stripe Connect onboarding link
+      description: >-
+        The server supplies its configured refresh and return destinations;
+        clients cannot override either URL.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Hosted onboarding link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentAccountLink"
+
+  /practitioner/calendar:
+    get:
+      operationId: getPractitionerCalendar
+      tags: [practitioner]
+      summary: Day-by-day agenda over a range
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Calendar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarResponse"
+
+  /appointments:
+    get:
+      operationId: listAppointments
+      tags: [appointments]
+      summary: Appointments for the signed-in account in its active role
+      parameters:
+        - name: scope
+          in: query
+          schema:
+            $ref: "#/components/schemas/AppointmentScope"
+      responses:
+        "200":
+          description: Appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Appointment"
+    post:
+      operationId: createBooking
+      tags: [appointments]
+      summary: Book a session
+      description: >-
+        Availability is re-checked inside the writing transaction and the
+        database rejects any overlap, so a slot cannot be sold twice. Repeating
+        the same `idempotencyKey` returns the original appointment instead of
+        creating a second one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookingRequest"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}:
+    get:
+      operationId: getAppointment
+      tags: [appointments]
+      summary: A single appointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      responses:
+        "200":
+          description: Appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/actions:
+    post:
+      operationId: actOnAppointment
+      tags: [appointments]
+      summary: Accept, decline, cancel, reschedule or complete an appointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentActionRequest"
+      responses:
+        "200":
+          description: Updated appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+
+  /appointments/{appointmentId}/checkout:
+    post:
+      operationId: createAppointmentCheckout
+      tags: [appointments]
+      summary: Create or reuse hosted checkout for an accepted appointment
+      description: >-
+        Checkout is available only after practitioner acceptance. The server
+        supplies allowlisted native or web success and cancellation
+        destinations based on the requested return target.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentCheckoutInput"
+      responses:
+        "200":
+          description: Hosted checkout session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckoutSessionResponse"
+
+  /appointments/{appointmentId}/payment:
+    get:
+      operationId: getAppointmentPayment
+      tags: [appointments]
+      summary: Payment state for an appointment
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      responses:
+        "200":
+          description: Appointment payment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentSummary"
+
+  /appointments/{appointmentId}/refunds:
+    post:
+      operationId: createAppointmentRefund
+      tags: [appointments]
+      summary: Request a full appointment refund
+      description: >-
+        Cancellations before the practitioner's notice window receive a full
+        refund. Late cancellations are not refunded automatically.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRefundInput"
+      responses:
+        "201":
+          description: Refund requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefundSummary"
+
+  /appointments/{appointmentId}/ics:
+    get:
+      operationId: getAppointmentCalendarFile
+      tags: [appointments]
+      summary: Calendar file for the appointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentId"
+      responses:
+        "200":
+          description: iCalendar payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarFile"
+
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [messaging]
+      summary: Conversation list with unread counts
+      responses:
+        "200":
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      operationId: openConversation
+      tags: [messaging]
+      summary: Open (or reuse) the thread with a practitioner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConversationRequest"
+      responses:
+        "200":
+          description: Conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /messages:
+    get:
+      operationId: listMessages
+      tags: [messaging]
+      summary: Messages in a conversation, oldest first
+      parameters:
+        - name: conversationId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: before
+          in: query
+          description: Return messages created before this instant
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+  /conversations/{conversationId}/messages:
+    post:
+      operationId: sendMessage
+      tags: [messaging]
+      summary: Send a message
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageDraft"
+      responses:
+        "201":
+          description: Sent message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  /conversations/{conversationId}/read:
+    post:
+      operationId: markConversationRead
+      tags: [messaging]
+      summary: Mark every message in the thread as read
+      parameters:
+        - $ref: "#/components/parameters/ConversationId"
+      responses:
+        "204":
+          description: Marked read
+
+  /users/{userId}/block:
+    post:
+      operationId: setUserBlock
+      tags: [messaging]
+      summary: Block or unblock another user
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockRequest"
+      responses:
+        "204":
+          description: Updated
+
+  /users/{userId}/report:
+    post:
+      operationId: reportUser
+      tags: [messaging]
+      summary: Report another user
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportRequest"
+      responses:
+        "204":
+          description: Reported
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: Notification centre entries, newest first
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+
+  /notifications/read:
+    post:
+      operationId: markNotificationsRead
+      tags: [notifications]
+      summary: Mark notifications as read
+      description: Omitting `ids` marks every unread notification as read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationReadRequest"
+      responses:
+        "204":
+          description: Marked read
+
+  /reviews:
+    post:
+      operationId: createReview
+      tags: [reviews]
+      summary: Review a completed session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDraft"
+      responses:
+        "201":
+          description: Created review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    PractitionerId:
+      name: practitionerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AppointmentId:
+      name: appointmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    AppConfig:
+      type: object
+      properties:
+        paymentsEnabled:
+          type: boolean
+        currency:
+          type: string
+        modalities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModalityInfo"
+      required:
+        - paymentsEnabled
+        - currency
+        - modalities
+
+    ModalityInfo:
+      type: object
+      properties:
+        value:
+          $ref: "#/components/schemas/Modality"
+        label:
+          type: string
+        description:
+          type: string
+      required:
+        - value
+        - label
+        - description
+
+    Modality:
+      type: string
+      enum: [mind, body, spirit, psychology]
+
+    SessionFormat:
+      type: string
+      enum: [online, phone, in_person]
+
+    PortalRole:
+      type: string
+      enum: [client, practitioner]
+
+    PractitionerSort:
+      type: string
+      enum: [recommended, price_asc, price_desc, rating, soonest]
+
+    AppointmentStatus:
+      type: string
+      enum: [pending, confirmed, completed, cancelled, declined]
+
+    PractitionerPaymentStatus:
+      type: string
+      enum:
+        - checkout_available
+        - not_required
+        - unavailable
+        - checkout_pending
+        - processing
+        - paid
+        - partially_refunded
+        - refunded
+        - failed
+        - cancelled
+
+    PaymentAccountStatus:
+      type: string
+      enum: [feature_disabled, policy_unavailable, onboarding_required, pending, restricted, ready]
+
+    RefundStatus:
+      type: string
+      enum: [pending, succeeded, failed, cancelled]
+
+    AppointmentScope:
+      type: string
+      enum: [upcoming, pending, past, all]
+
+    SignupStep:
+      type: string
+      enum: [account, verify_email, modality, headline, bio, details, complete]
+
+    ClientRegistration:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        timezone:
+          type: string
+        country:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+      required:
+        - fullName
+        - email
+        - password
+        - timezone
+
+    Credentials:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        role:
+          $ref: "#/components/schemas/PortalRole"
+      required:
+        - email
+        - password
+        - role
+
+    RoleSelection:
+      type: object
+      properties:
+        role:
+          $ref: "#/components/schemas/PortalRole"
+      required:
+        - role
+
+    AuthSession:
+      type: object
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/CurrentUser"
+      required:
+        - token
+        - expiresAt
+        - user
+
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        fullName:
+          type: string
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        isClient:
+          type: boolean
+        isPractitioner:
+          type: boolean
+        emailVerified:
+          type: boolean
+        activeRole:
+          $ref: "#/components/schemas/PortalRole"
+        onboardingStep:
+          $ref: "#/components/schemas/SignupStep"
+        onboardingComplete:
+          type: boolean
+      required:
+        - id
+        - email
+        - fullName
+        - timezone
+        - isClient
+        - isPractitioner
+        - emailVerified
+        - activeRole
+        - onboardingComplete
+
+    PractitionerSignupStart:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        country:
+          type: string
+        phone:
+          type: string
+        timezone:
+          type: string
+      required:
+        - fullName
+        - email
+        - password
+        - country
+        - phone
+        - timezone
+
+    OtpVerification:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+      required:
+        - email
+        - code
+
+    OtpResendRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+        - email
+
+    PractitionerSignupDraft:
+      type: object
+      properties:
+        modality:
+          $ref: "#/components/schemas/Modality"
+        headline:
+          type: string
+        bio:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+        languages:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        hourlyRateCents:
+          type: integer
+        currency:
+          type: string
+        location:
+          type: string
+        timezone:
+          type: string
+
+    PractitionerSignupDraftUpdate:
+      type: object
+      properties:
+        step:
+          $ref: "#/components/schemas/SignupStep"
+        draft:
+          $ref: "#/components/schemas/PractitionerSignupDraft"
+      required:
+        - step
+        - draft
+
+    PractitionerSignupState:
+      type: object
+      properties:
+        email:
+          type: string
+        currentStep:
+          $ref: "#/components/schemas/SignupStep"
+        completed:
+          type: boolean
+        draft:
+          $ref: "#/components/schemas/PractitionerSignupDraft"
+        devCode:
+          type: ["string", "null"]
+          description: >-
+            The verification code, returned only when no email provider is
+            configured so signup can still be completed in development. Always
+            null once an email provider is connected.
+      required:
+        - email
+        - currentStep
+        - completed
+        - draft
+
+    ClientProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        isPractitioner:
+          type: boolean
+      required:
+        - id
+        - fullName
+        - email
+        - timezone
+        - isPractitioner
+
+    ClientProfileUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+          minLength: 2
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+      required:
+        - fullName
+        - timezone
+
+    PractitionerCard:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        headline:
+          type: ["string", "null"]
+        modality:
+          $ref: "#/components/schemas/Modality"
+        avatarUrl:
+          type: ["string", "null"]
+        coverPhotoUrl:
+          type: ["string", "null"]
+        languages:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        location:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        hourlyRateCents:
+          type: ["integer", "null"]
+        fromPriceCents:
+          type: ["integer", "null"]
+        currency:
+          type: string
+        ratingAverage:
+          type: ["number", "null"]
+        ratingCount:
+          type: integer
+        formats:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionFormat"
+        nextAvailableAt:
+          type: ["string", "null"]
+          format: date-time
+        nextAvailableLabel:
+          type: ["string", "null"]
+      required:
+        - id
+        - fullName
+        - modality
+        - languages
+        - tags
+        - timezone
+        - currency
+        - ratingCount
+        - formats
+
+    PractitionerSearchPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PractitionerCard"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        hasMore:
+          type: boolean
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+        - hasMore
+
+    PractitionerPublicProfile:
+      type: object
+      properties:
+        practitioner:
+          $ref: "#/components/schemas/PractitionerCard"
+        bio:
+          type: ["string", "null"]
+        photos:
+          type: array
+          items:
+            type: string
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/Service"
+        reviews:
+          type: array
+          items:
+            $ref: "#/components/schemas/Review"
+        policy:
+          $ref: "#/components/schemas/BookingPolicy"
+      required:
+        - practitioner
+        - photos
+        - services
+        - reviews
+        - policy
+
+    PractitionerProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        modality:
+          $ref: "#/components/schemas/Modality"
+        headline:
+          type: ["string", "null"]
+        bio:
+          type: ["string", "null"]
+        photos:
+          type: array
+          items:
+            type: string
+        languages:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        hourlyRateCents:
+          type: ["integer", "null"]
+        currency:
+          type: string
+        location:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        isPublished:
+          type: boolean
+        ratingAverage:
+          type: ["number", "null"]
+        ratingCount:
+          type: integer
+        policy:
+          $ref: "#/components/schemas/BookingPolicy"
+      required:
+        - id
+        - fullName
+        - email
+        - photos
+        - languages
+        - tags
+        - currency
+        - timezone
+        - isPublished
+        - ratingCount
+        - policy
+
+    PractitionerProfileUpdate:
+      type: object
+      properties:
+        fullName:
+          type: string
+        headline:
+          type: ["string", "null"]
+        bio:
+          type: ["string", "null"]
+        photos:
+          type: array
+          items:
+            type: string
+        languages:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        hourlyRateCents:
+          type: ["integer", "null"]
+        currency:
+          type: string
+        location:
+          type: ["string", "null"]
+        timezone:
+          type: string
+        modality:
+          $ref: "#/components/schemas/Modality"
+        avatarUrl:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        country:
+          type: ["string", "null"]
+        isPublished:
+          type: boolean
+      required:
+        - fullName
+        - timezone
+
+    BookingPolicy:
+      type: object
+      properties:
+        bufferBeforeMinutes:
+          type: integer
+          minimum: 0
+          maximum: 240
+        bufferAfterMinutes:
+          type: integer
+          minimum: 0
+          maximum: 240
+        minNoticeMinutes:
+          type: integer
+          minimum: 0
+        maxAdvanceDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        instantBooking:
+          type: boolean
+        cancellationNoticeHours:
+          type: integer
+          minimum: 0
+          maximum: 168
+      required:
+        - bufferBeforeMinutes
+        - bufferAfterMinutes
+        - minNoticeMinutes
+        - maxAdvanceDays
+        - instantBooking
+        - cancellationNoticeHours
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+        practitionerId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        durationMinutes:
+          type: integer
+        priceCents:
+          type: integer
+        currency:
+          type: string
+        format:
+          $ref: "#/components/schemas/SessionFormat"
+        isActive:
+          type: boolean
+      required:
+        - id
+        - practitionerId
+        - name
+        - description
+        - durationMinutes
+        - priceCents
+        - currency
+        - format
+        - isActive
+
+    ServiceDraft:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        description:
+          type: string
+        durationMinutes:
+          type: integer
+          minimum: 15
+          maximum: 480
+        priceCents:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+        format:
+          $ref: "#/components/schemas/SessionFormat"
+        isActive:
+          type: boolean
+      required:
+        - name
+        - description
+        - durationMinutes
+        - priceCents
+        - currency
+        - format
+        - isActive
+
+    AvailabilityRule:
+      type: object
+      description: >-
+        A recurring weekly window in the practitioner's own wall clock.
+        `weekday` is 1 (Monday) through 7 (Sunday); minutes count from local
+        midnight.
+      properties:
+        weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+        startMinute:
+          type: integer
+          minimum: 0
+          maximum: 1440
+        endMinute:
+          type: integer
+          minimum: 0
+          maximum: 1440
+      required:
+        - weekday
+        - startMinute
+        - endMinute
+
+    AvailabilitySchedule:
+      type: object
+      properties:
+        timezone:
+          type: string
+        rules:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilityRule"
+      required:
+        - timezone
+        - rules
+
+    AvailabilityException:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [block, vacation, extra]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        startMinute:
+          type: ["integer", "null"]
+        endMinute:
+          type: ["integer", "null"]
+        note:
+          type: ["string", "null"]
+      required:
+        - id
+        - kind
+        - startDate
+        - endDate
+
+    AvailabilityExceptionDraft:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [block, vacation, extra]
+        startDate:
+          type: string
+        endDate:
+          type: string
+        startMinute:
+          type: ["integer", "null"]
+        endMinute:
+          type: ["integer", "null"]
+        note:
+          type: ["string", "null"]
+      required:
+        - kind
+        - startDate
+        - endDate
+
+    AvailabilitySlot:
+      type: object
+      properties:
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        viewerLabel:
+          type: string
+          description: Start time rendered in the viewer's zone, e.g. `2:00 PM`
+        practitionerLabel:
+          type: string
+          description: Same instant rendered in the practitioner's zone
+      required:
+        - startsAt
+        - endsAt
+        - viewerLabel
+        - practitionerLabel
+
+    AvailabilityDay:
+      type: object
+      properties:
+        date:
+          type: string
+          description: Local calendar day in the viewer's zone, `YYYY-MM-DD`
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilitySlot"
+      required:
+        - date
+        - slots
+
+    AvailabilityCalendar:
+      type: object
+      properties:
+        practitionerTimezone:
+          type: string
+        viewerTimezone:
+          type: string
+        sameTimezone:
+          type: boolean
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilityDay"
+      required:
+        - practitionerTimezone
+        - viewerTimezone
+        - sameTimezone
+        - days
+
+    PartyRef:
+      type: object
+      properties:
+        id:
+          type: string
+        fullName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        headline:
+          type: ["string", "null"]
+        timezone:
+          type: string
+      required:
+        - id
+        - fullName
+        - timezone
+
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        serviceName:
+          type: string
+        serviceDurationMinutes:
+          type: integer
+        servicePriceCents:
+          type: integer
+        serviceCurrency:
+          type: string
+        serviceFormat:
+          $ref: "#/components/schemas/SessionFormat"
+        clientTimezone:
+          type: string
+        practitionerTimezone:
+          type: string
+        viewerTimezone:
+          type: string
+        viewerLabel:
+          type: string
+        counterpartLabel:
+          type: string
+        clientNotes:
+          type: ["string", "null"]
+        cancellationReason:
+          type: ["string", "null"]
+        cancelledLate:
+          type: boolean
+        client:
+          $ref: "#/components/schemas/PartyRef"
+        practitioner:
+          $ref: "#/components/schemas/PartyRef"
+        viewerRole:
+          $ref: "#/components/schemas/PortalRole"
+        canReview:
+          type: boolean
+        hasReview:
+          type: boolean
+        payment:
+          oneOf:
+            - $ref: "#/components/schemas/PaymentSummary"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - startsAt
+        - endsAt
+        - serviceName
+        - serviceDurationMinutes
+        - servicePriceCents
+        - serviceCurrency
+        - serviceFormat
+        - clientTimezone
+        - practitionerTimezone
+        - viewerTimezone
+        - viewerLabel
+        - counterpartLabel
+        - cancelledLate
+        - client
+        - practitioner
+        - viewerRole
+        - canReview
+        - hasReview
+        - payment
+        - createdAt
+
+    PaymentSummary:
+      type: object
+      properties:
+        id:
+          type: ["string", "null"]
+          format: uuid
+        appointmentId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/PractitionerPaymentStatus"
+        message:
+          type: ["string", "null"]
+        grossAmountCents:
+          type: integer
+        platformFeeCents:
+          type: integer
+        platformFeeBasisPoints:
+          type: integer
+          description: Platform fee policy captured when checkout was created.
+        practitionerNetCents:
+          type: integer
+        currency:
+          type: string
+        paidAt:
+          type: ["string", "null"]
+          format: date-time
+        refundedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - appointmentId
+        - status
+        - message
+        - grossAmountCents
+        - platformFeeCents
+        - platformFeeBasisPoints
+        - practitionerNetCents
+        - currency
+        - paidAt
+        - refundedAt
+        - createdAt
+
+    PractitionerPayments:
+      type: object
+      properties:
+        accountStatus:
+          $ref: "#/components/schemas/PaymentAccountStatus"
+        message:
+          type: string
+        country:
+          type: ["string", "null"]
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentSummary"
+      required: [accountStatus, message, country, payments]
+
+    CheckoutSessionResponse:
+      type: object
+      properties:
+        payment:
+          $ref: "#/components/schemas/PaymentSummary"
+        checkoutUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - payment
+        - checkoutUrl
+        - expiresAt
+
+    RefundSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+        amountCents:
+          type: integer
+        currency:
+          type: string
+        status:
+          $ref: "#/components/schemas/RefundStatus"
+        reason:
+          type: ["string", "null"]
+        refundedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - paymentId
+        - amountCents
+        - currency
+        - status
+        - reason
+        - refundedAt
+        - createdAt
+
+    PaymentAccountLink:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/PaymentAccountStatus"
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+      required:
+        - status
+        - url
+        - expiresAt
+
+    PaymentCheckoutInput:
+      type: object
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+        returnTarget:
+          type: string
+          enum:
+            - native
+            - web
+      required:
+        - idempotencyKey
+        - returnTarget
+
+    PaymentRefundInput:
+      type: object
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+        reason:
+          type: ["string", "null"]
+      required:
+        - idempotencyKey
+
+    BookingRequest:
+      type: object
+      properties:
+        practitionerId:
+          type: string
+        serviceId:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        clientTimezone:
+          type: string
+        notes:
+          type: ["string", "null"]
+        idempotencyKey:
+          type: string
+          minLength: 8
+      required:
+        - practitionerId
+        - serviceId
+        - startsAt
+        - clientTimezone
+        - idempotencyKey
+
+    AppointmentActionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [accept, decline, cancel, complete, reschedule]
+        startsAt:
+          type: ["string", "null"]
+          format: date-time
+          description: Required for `reschedule`
+        reason:
+          type: ["string", "null"]
+      required:
+        - action
+
+    CalendarFile:
+      type: object
+      properties:
+        filename:
+          type: string
+        contentType:
+          type: string
+        content:
+          type: string
+      required:
+        - filename
+        - contentType
+        - content
+
+    CalendarDay:
+      type: object
+      properties:
+        date:
+          type: string
+        appointments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appointment"
+      required:
+        - date
+        - appointments
+
+    CalendarResponse:
+      type: object
+      properties:
+        timezone:
+          type: string
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarDay"
+      required:
+        - timezone
+        - days
+
+    DashboardSummary:
+      type: object
+      properties:
+        pendingCount:
+          type: integer
+        upcomingCount:
+          type: integer
+        completedThisMonth:
+          type: integer
+        earningsThisMonthCents:
+          type: integer
+        currency:
+          type: string
+        ratingAverage:
+          type: ["number", "null"]
+        ratingCount:
+          type: integer
+        unreadMessages:
+          type: integer
+        profileCompletion:
+          type: integer
+          description: Percentage, 0-100
+        isPublished:
+          type: boolean
+        nextAppointment:
+          oneOf:
+            - $ref: "#/components/schemas/Appointment"
+            - type: "null"
+      required:
+        - pendingCount
+        - upcomingCount
+        - completedThisMonth
+        - earningsThisMonthCents
+        - currency
+        - ratingCount
+        - unreadMessages
+        - profileCompletion
+        - isPublished
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+        otherParty:
+          $ref: "#/components/schemas/PartyRef"
+        lastMessageAt:
+          type: ["string", "null"]
+          format: date-time
+        lastMessagePreview:
+          type: ["string", "null"]
+        unreadCount:
+          type: integer
+        blockedByMe:
+          type: boolean
+        blockedByThem:
+          type: boolean
+      required:
+        - id
+        - otherParty
+        - unreadCount
+        - blockedByMe
+        - blockedByThem
+
+    ConversationRequest:
+      type: object
+      properties:
+        practitionerId:
+          type: string
+      required:
+        - practitionerId
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        conversationId:
+          type: string
+        senderId:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: ["string", "null"]
+          format: date-time
+        mine:
+          type: boolean
+      required:
+        - id
+        - conversationId
+        - senderId
+        - body
+        - createdAt
+        - mine
+
+    MessageDraft:
+      type: object
+      properties:
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      required:
+        - body
+
+    BlockRequest:
+      type: object
+      properties:
+        blocked:
+          type: boolean
+      required:
+        - blocked
+
+    ReportRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+        details:
+          type: ["string", "null"]
+      required:
+        - reason
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        appointmentId:
+          type: ["string", "null"]
+        conversationId:
+          type: ["string", "null"]
+        readAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - title
+        - body
+        - createdAt
+
+    NotificationReadRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+      required: []
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+        appointmentId:
+          type: string
+        practitionerId:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: ["string", "null"]
+        clientName:
+          type: string
+        clientAvatarUrl:
+          type: ["string", "null"]
+        serviceName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - appointmentId
+        - practitionerId
+        - rating
+        - clientName
+        - serviceName
+        - createdAt
+
+    ReviewDraft:
+      type: object
+      properties:
+        appointmentId:
+          type: string
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: ["string", "null"]
+      required:
+        - appointmentId
+        - rating
