@@ -214,7 +214,7 @@ export default function Practitioners() {
               asChild
               data-testid="pract-hero-cta-clients"
             >
-              <Link href="/" className="gap-2 flex items-center">
+              <Link href="/discover" className="gap-2 flex items-center">
                 Looking for care?
                 <ArrowRight className="w-4 h-4" />
               </Link>
@@ -491,7 +491,7 @@ export default function Practitioners() {
                 testId="pract-final-cta-primary"
               />
               <Link
-                href="/"
+                href="/discover"
                 className={cn(
                   'text-sm font-medium text-primary-foreground/70 hover:text-primary-foreground transition-colors underline underline-offset-4'
                 )}

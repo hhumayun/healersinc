@@ -23,6 +23,13 @@ import {
 import { Separator } from '@workspace/healers-inc/components/ui/separator';
 import { cn } from '@workspace/healers-inc/lib/utils';
 import { MobileCta } from '@/components/mobile-cta';
+import { PractitionerCard } from '@/components/practitioner-card';
+import { Skeleton } from '@workspace/healers-inc/components/ui/skeleton';
+import {
+  getSearchPractitionersQueryKey,
+  useSearchPractitioners,
+} from '@workspace/api-client-react';
+import { useViewerTimezone } from '@/lib/session';
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -123,6 +130,121 @@ const TESTIMONIALS = [
   },
 ];
 
+/**
+ * The showcase prefers real, bookable practitioners so its cards lead into
+ * the site's own routes. The marketing page must still render with no API
+ * behind it, so the illustrative set stays as the fallback.
+ */
+function ShowcaseGrid() {
+  const timezone = useViewerTimezone();
+  const params = {
+    sort: 'recommended' as const,
+    pageSize: 3,
+    page: 1,
+    timezone,
+  };
+  const search = useSearchPractitioners(params, {
+    query: {
+      queryKey: getSearchPractitionersQueryKey(params),
+      retry: false,
+      staleTime: 5 * 60_000,
+    },
+  });
+
+  const live = search.data?.items ?? [];
+
+  if (live.length > 0) {
+    return (
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+        data-testid="practitioner-showcase-live"
+      >
+        {live.map((item) => (
+          <PractitionerCard key={item.id} item={item} />
+        ))}
+      </div>
+    );
+  }
+
+  if (search.isLoading) {
+    return (
+      <div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+        aria-hidden
+      >
+        {PRACTITIONERS.map((p) => (
+          <Skeleton key={p.id} className="h-56 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+      data-testid="practitioner-showcase-static"
+    >
+      {PRACTITIONERS.map((p, i) => (
+        <Card
+          key={p.id}
+          className="group border-border hover:shadow-md transition-all duration-300"
+          data-testid={`practitioner-card-${p.id}`}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between mb-5">
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-primary-foreground"
+                style={{ background: `hsl(var(--primary) / ${0.7 + i * 0.1})` }}
+                data-testid={`practitioner-avatar-${p.id}`}
+              >
+                {p.name.charAt(0)}
+              </div>
+              <Badge
+                variant={p.available ? 'default' : 'outline'}
+                className="text-xs"
+                data-testid={`practitioner-availability-${p.id}`}
+              >
+                {p.available ? 'Available now' : 'Waitlist open'}
+              </Badge>
+            </div>
+
+            <h3
+              className="font-semibold text-foreground mb-0.5"
+              data-testid={`practitioner-name-${p.id}`}
+            >
+              {p.name}
+            </h3>
+            <p
+              className="text-sm text-muted-foreground mb-4"
+              data-testid={`practitioner-specialty-${p.id}`}
+            >
+              {p.specialty}
+            </p>
+
+            <Separator className="mb-4" />
+
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5" />
+                <span data-testid={`practitioner-timezone-${p.id}`}>
+                  {p.timezone}
+                </span>
+              </span>
+              <span className="flex items-center gap-1 font-medium text-foreground">
+                <Star className="w-3.5 h-3.5 fill-primary text-primary" />
+                <span data-testid={`practitioner-rating-${p.id}`}>{p.rating}</span>
+                <span className="text-muted-foreground font-normal">
+                  ({p.reviews})
+                </span>
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   useEffect(() => {
     document.title = 'Healers Inc — Find Your Practitioner';
@@ -193,24 +315,30 @@ export default function Home() {
           <motion.div
             variants={fadeUp}
             custom={3}
-            className="flex flex-col sm:flex-row gap-4 items-center justify-center"
+            className="flex flex-col items-center gap-4"
           >
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
+              <Button size="lg" asChild data-testid="hero-cta-primary">
+                <Link href="/discover">Find your practitioner</Link>
+              </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                asChild
+                data-testid="hero-cta-practitioners"
+              >
+                <Link href="/practitioners" className="gap-2 flex items-center">
+                  Are you a practitioner?
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
+            </div>
             <MobileCta
-              label="Find your practitioner"
-              size="lg"
-              testId="hero-cta-primary"
+              label="Prefer the app? Get it for iPhone or Android"
+              variant="link"
+              size="sm"
+              testId="hero-cta-app"
             />
-            <Button
-              variant="ghost"
-              size="lg"
-              asChild
-              data-testid="hero-cta-practitioners"
-            >
-              <Link href="/practitioners" className="gap-2 flex items-center">
-                Are you a practitioner?
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
           </motion.div>
         </motion.div>
 
@@ -343,72 +471,12 @@ export default function Home() {
                 Practitioners who bring their whole selves
               </h2>
             </div>
-            <MobileCta
-              label="Browse all practitioners"
-              variant="outline"
-              testId="practitioners-browse-cta"
-            />
+            <Button variant="outline" asChild data-testid="practitioners-browse-cta">
+              <Link href="/discover">Browse all practitioners</Link>
+            </Button>
           </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {PRACTITIONERS.map((p, i) => (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.45 }}
-              >
-                <Card
-                  className="group border-border hover:shadow-md transition-all duration-300 cursor-default"
-                  data-testid={`practitioner-card-${p.id}`}
-                >
-                  <CardContent className="p-6">
-                    {/* Avatar area */}
-                    <div className="flex items-start justify-between mb-5">
-                      <div
-                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-primary-foreground"
-                        style={{
-                          background: `hsl(var(--primary) / ${0.7 + i * 0.1})`,
-                        }}
-                        data-testid={`practitioner-avatar-${p.id}`}
-                      >
-                        {p.name.charAt(0)}
-                      </div>
-                      <Badge
-                        variant={p.available ? 'default' : 'outline'}
-                        className="text-xs"
-                        data-testid={`practitioner-availability-${p.id}`}
-                      >
-                        {p.available ? 'Available now' : 'Waitlist open'}
-                      </Badge>
-                    </div>
-
-                    <h3 className="font-semibold text-foreground mb-0.5" data-testid={`practitioner-name-${p.id}`}>
-                      {p.name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4" data-testid={`practitioner-specialty-${p.id}`}>
-                      {p.specialty}
-                    </p>
-
-                    <Separator className="mb-4" />
-
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Globe className="w-3.5 h-3.5" />
-                        <span data-testid={`practitioner-timezone-${p.id}`}>{p.timezone}</span>
-                      </span>
-                      <span className="flex items-center gap-1 font-medium text-foreground">
-                        <Star className="w-3.5 h-3.5 fill-primary text-primary" />
-                        <span data-testid={`practitioner-rating-${p.id}`}>{p.rating}</span>
-                        <span className="text-muted-foreground font-normal">({p.reviews})</span>
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
+          <ShowcaseGrid />
         </div>
       </section>
 
@@ -568,12 +636,14 @@ export default function Home() {
               Discover practitioners who see you, wherever you are in the world.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-              <MobileCta
-                label="Get started — it's free"
+              <Button
                 variant="secondary"
                 size="lg"
-                testId="final-cta-primary"
-              />
+                asChild
+                data-testid="final-cta-primary"
+              >
+                <Link href="/sign-up">Get started — it's free</Link>
+              </Button>
               <Link
                 href="/practitioners"
                 className={cn(
