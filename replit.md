@@ -5,6 +5,9 @@ _Replace the heading above with the project's name, and this line with one sente
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/healers-inc-web run dev` — run the marketing site
+  and client web app. It calls the API at same-origin `/api/...`; set
+  `VITE_API_BASE_URL` only to point it at an API on another origin.
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
@@ -34,7 +37,12 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 - Native Stripe Checkout returns through fixed API handlers into the
   `healers-app://` scheme. Expo web Checkout uses the server-allowlisted
   `PAYMENT_WEB_RETURN_BASE_URL`; development automatically uses
-  `REPLIT_EXPO_DEV_DOMAIN`.
+  `REPLIT_EXPO_DEV_DOMAIN`. Checkout started from the website
+  (`returnTarget: "site"`) returns to `PAYMENT_SITE_RETURN_BASE_URL`, or to
+  `REPLIT_DOMAINS` plus `PAYMENT_SITE_RETURN_BASE_PATH` (default
+  `/healers-inc-web/`) when that is unset. Every browser destination is
+  composed server-side in `paymentReturnUrls.ts`; callers only name which
+  target they want, never a URL.
 
 ## Product
 
