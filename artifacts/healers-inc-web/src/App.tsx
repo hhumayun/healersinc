@@ -6,8 +6,12 @@ import { TooltipProvider } from '@workspace/healers-inc/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import Home from '@/pages/home';
 import Practitioners from '@/pages/practitioners';
+import SignIn from '@/pages/sign-in';
+import SignUp from '@/pages/sign-up';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
+import { useRealtime } from '@/hooks/use-realtime';
+import { SessionProvider } from '@/lib/session';
 import {
   Route,
   Switch,
@@ -15,15 +19,28 @@ import {
   Router as WouterRouter,
 } from 'wouter';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function Router() {
+  // One socket for the whole site; every event invalidates the queries it
+  // affects, so chat, bookings and notifications stay live.
+  useRealtime();
+
   return (
     <RoutedErrorBoundary>
       <Nav />
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/practitioners" component={Practitioners} />
+        <Route path="/sign-in" component={SignIn} />
+        <Route path="/sign-up" component={SignUp} />
         <Route component={NotFound} />
       </Switch>
       <Footer />
@@ -41,7 +58,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
+          <SessionProvider>
+            <Router />
+          </SessionProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>
