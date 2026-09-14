@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   checkoutReturnUrls,
+  paymentSiteReturnBaseUrl,
   paymentWebReturnBaseUrl,
 } from "./paymentReturnUrls";
 
@@ -52,4 +53,61 @@ test("Expo development domain is allowed only outside production", () => {
       REPLIT_EXPO_DEV_DOMAIN: "preview.expo.example.com",
     }),
   );
+});
+
+test("website Checkout returns to the site's own landing route", () => {
+  assert.deepEqual(
+    checkoutReturnUrls({
+      appointmentId: "appointment-id",
+      returnTarget: "site",
+      apiBaseUrl: "https://api.example.com",
+      webBaseUrl: "https://site.example.com/healers-inc-web/",
+    }),
+    {
+      successUrl:
+        "https://site.example.com/healers-inc-web/checkout-return?appointmentId=appointment-id&status=success",
+      cancelUrl:
+        "https://site.example.com/healers-inc-web/checkout-return?appointmentId=appointment-id&status=cancelled",
+    },
+  );
+});
+
+test("the site return base is composed from the Replit domain and base path", () => {
+  assert.equal(
+    paymentSiteReturnBaseUrl({
+      REPLIT_DOMAINS: "site.example.com,other.example.com",
+    }),
+    "https://site.example.com/healers-inc-web/",
+  );
+  assert.equal(
+    paymentSiteReturnBaseUrl({
+      REPLIT_DOMAINS: "site.example.com",
+      PAYMENT_SITE_RETURN_BASE_PATH: "/preview/",
+    }),
+    "https://site.example.com/preview/",
+  );
+});
+
+test("an explicit site return base wins, and must be a plain HTTPS base URL", () => {
+  assert.equal(
+    paymentSiteReturnBaseUrl({
+      PAYMENT_SITE_RETURN_BASE_URL: "https://www.example.com/app",
+      REPLIT_DOMAINS: "ignored.example.com",
+    }),
+    "https://www.example.com/app/",
+  );
+  assert.throws(() =>
+    paymentSiteReturnBaseUrl({
+      PAYMENT_SITE_RETURN_BASE_URL: "http://insecure.example.com",
+    }),
+  );
+  assert.throws(() =>
+    paymentSiteReturnBaseUrl({
+      PAYMENT_SITE_RETURN_BASE_URL: "https://example.com/app?next=evil",
+    }),
+  );
+});
+
+test("website Checkout needs configuration when no domain is available", () => {
+  assert.throws(() => paymentSiteReturnBaseUrl({}));
 });

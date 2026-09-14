@@ -2074,9 +2074,15 @@ components:
           maxLength: 128
         returnTarget:
           type: string
+          description: >-
+            Where hosted Checkout should send the payer back to. `native` uses
+            the app's deep-link handlers, `web` the Expo web build, and `site`
+            the Healers Inc website. The server composes every destination
+            itself from allowlisted configuration; callers never supply a URL.
           enum:
             - native
             - web
+            - site
       required:
         - idempotencyKey
         - returnTarget

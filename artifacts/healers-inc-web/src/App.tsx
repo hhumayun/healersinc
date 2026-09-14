@@ -10,6 +10,10 @@ import SignIn from '@/pages/sign-in';
 import SignUp from '@/pages/sign-up';
 import Discover from '@/pages/discover';
 import PractitionerProfilePage from '@/pages/practitioner';
+import BookPage from '@/pages/book';
+import BookingsPage from '@/pages/bookings';
+import AppointmentPage from '@/pages/appointment';
+import CheckoutReturn from '@/pages/checkout-return';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { useRealtime } from '@/hooks/use-realtime';
@@ -45,6 +49,10 @@ function Router() {
         <Route path="/sign-up" component={SignUp} />
         <Route path="/discover" component={Discover} />
         <Route path="/practitioner/:id" component={PractitionerProfilePage} />
+        <Route path="/book/:practitionerId" component={BookPage} />
+        <Route path="/bookings" component={BookingsPage} />
+        <Route path="/bookings/:id" component={AppointmentPage} />
+        <Route path="/checkout-return" component={CheckoutReturn} />
         <Route component={NotFound} />
       </Switch>
       <Footer />

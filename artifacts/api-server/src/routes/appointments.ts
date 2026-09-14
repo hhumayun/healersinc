@@ -51,10 +51,7 @@ import {
   unpaidPaymentSummary,
 } from "../lib/payments";
 import { countryIsEligible, paymentPolicy } from "../lib/paymentPolicy";
-import {
-  checkoutReturnUrls,
-  paymentWebReturnBaseUrl,
-} from "../lib/paymentReturnUrls";
+import { checkoutReturnUrls } from "../lib/paymentReturnUrls";
 import { getUncachableStripeClient } from "../stripeClient";
 
 const router: IRouter = Router();
@@ -592,12 +589,12 @@ router.post(
     }
     const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim();
     if (!domain) throw new Error("REPLIT_DOMAINS is required for checkout.");
+    // Every browser return destination is composed server-side from
+    // allowlisted configuration, so the caller only names which one it wants.
     const returnUrls = checkoutReturnUrls({
       appointmentId: appointment.id,
       returnTarget: body.returnTarget,
       apiBaseUrl: `https://${domain}`,
-      webBaseUrl:
-        body.returnTarget === "web" ? paymentWebReturnBaseUrl() : undefined,
     });
     const checkout = await createCheckout({
       appointment,

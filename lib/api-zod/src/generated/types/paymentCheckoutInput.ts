@@ -13,5 +13,6 @@ export interface PaymentCheckoutInput {
      * @maxLength 128
      */
   idempotencyKey: string;
+  /** Where hosted Checkout should send the payer back to. `native` uses the app's deep-link handlers, `web` the Expo web build, and `site` the Healers Inc website. The server composes every destination itself from allowlisted configuration; callers never supply a URL. */
   returnTarget: PaymentCheckoutInputReturnTarget;
 }

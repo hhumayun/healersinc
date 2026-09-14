@@ -1354,7 +1354,7 @@ export const createAppointmentCheckoutBodyIdempotencyKeyMax = 128;
 
 export const CreateAppointmentCheckoutBody = zod.object({
   "idempotencyKey": zod.string().min(createAppointmentCheckoutBodyIdempotencyKeyMin).max(createAppointmentCheckoutBodyIdempotencyKeyMax),
-  "returnTarget": zod.enum(['native', 'web'])
+  "returnTarget": zod.enum(['native', 'web', 'site']).describe('Where hosted Checkout should send the payer back to. `native` uses the app\'s deep-link handlers, `web` the Expo web build, and `site` the Healers Inc website. The server composes every destination itself from allowlisted configuration; callers never supply a URL.')
 })
 
 export const CreateAppointmentCheckoutResponse = zod.object({
