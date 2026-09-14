@@ -14,6 +14,11 @@ import BookPage from '@/pages/book';
 import BookingsPage from '@/pages/bookings';
 import AppointmentPage from '@/pages/appointment';
 import CheckoutReturn from '@/pages/checkout-return';
+import MessagesPage from '@/pages/messages';
+import ConversationPage from '@/pages/conversation';
+import NotificationsPage from '@/pages/notifications';
+import ReviewPage from '@/pages/review';
+import AccountPage from '@/pages/account';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { useRealtime } from '@/hooks/use-realtime';
@@ -51,8 +56,13 @@ function Router() {
         <Route path="/practitioner/:id" component={PractitionerProfilePage} />
         <Route path="/book/:practitionerId" component={BookPage} />
         <Route path="/bookings" component={BookingsPage} />
+        <Route path="/bookings/:id/review" component={ReviewPage} />
         <Route path="/bookings/:id" component={AppointmentPage} />
         <Route path="/checkout-return" component={CheckoutReturn} />
+        <Route path="/messages" component={MessagesPage} />
+        <Route path="/messages/:id" component={ConversationPage} />
+        <Route path="/notifications" component={NotificationsPage} />
+        <Route path="/account" component={AccountPage} />
         <Route component={NotFound} />
       </Switch>
       <Footer />
