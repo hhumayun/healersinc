@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 #
 # API server image for Railway (or any container host).
 #
