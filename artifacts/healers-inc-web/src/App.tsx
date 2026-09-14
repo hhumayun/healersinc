@@ -8,6 +8,8 @@ import Home from '@/pages/home';
 import Practitioners from '@/pages/practitioners';
 import SignIn from '@/pages/sign-in';
 import SignUp from '@/pages/sign-up';
+import Discover from '@/pages/discover';
+import PractitionerProfilePage from '@/pages/practitioner';
 import { Nav } from '@/components/nav';
 import { Footer } from '@/components/footer';
 import { useRealtime } from '@/hooks/use-realtime';
@@ -41,6 +43,8 @@ function Router() {
         <Route path="/practitioners" component={Practitioners} />
         <Route path="/sign-in" component={SignIn} />
         <Route path="/sign-up" component={SignUp} />
+        <Route path="/discover" component={Discover} />
+        <Route path="/practitioner/:id" component={PractitionerProfilePage} />
         <Route component={NotFound} />
       </Switch>
       <Footer />
