@@ -32,82 +32,7 @@ export const GetAppConfigResponse = zod.object({
 
 
 /**
- * @summary Create a client account
- */
-export const registerClientBodyFullNameMin = 2;
-
-export const registerClientBodyPasswordMin = 8;
-
-
-
-export const RegisterClientBody = zod.object({
-  "fullName": zod.string().min(registerClientBodyFullNameMin),
-  "email": zod.email(),
-  "password": zod.string().min(registerClientBodyPasswordMin),
-  "timezone": zod.string(),
-  "country": zod.string().nullish(),
-  "phone": zod.string().nullish()
-})
-
-export const RegisterClientResponse = zod.object({
-  "token": zod.string(),
-  "expiresAt": zod.coerce.date(),
-  "user": zod.object({
-  "id": zod.string(),
-  "email": zod.string(),
-  "fullName": zod.string(),
-  "phone": zod.string().nullish(),
-  "country": zod.string().nullish(),
-  "timezone": zod.string(),
-  "avatarUrl": zod.string().nullish(),
-  "isClient": zod.boolean(),
-  "isPractitioner": zod.boolean(),
-  "emailVerified": zod.boolean(),
-  "activeRole": zod.enum(['client', 'practitioner']),
-  "onboardingStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
-  "onboardingComplete": zod.boolean()
-})
-})
-
-
-/**
- * `role` selects which side of the marketplace the session opens in. An account holding both roles can sign in to either.
- * @summary Sign in to a specific portal
- */
-export const LoginBody = zod.object({
-  "email": zod.email(),
-  "password": zod.string(),
-  "role": zod.enum(['client', 'practitioner'])
-})
-
-export const LoginResponse = zod.object({
-  "token": zod.string(),
-  "expiresAt": zod.coerce.date(),
-  "user": zod.object({
-  "id": zod.string(),
-  "email": zod.string(),
-  "fullName": zod.string(),
-  "phone": zod.string().nullish(),
-  "country": zod.string().nullish(),
-  "timezone": zod.string(),
-  "avatarUrl": zod.string().nullish(),
-  "isClient": zod.boolean(),
-  "isPractitioner": zod.boolean(),
-  "emailVerified": zod.boolean(),
-  "activeRole": zod.enum(['client', 'practitioner']),
-  "onboardingStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
-  "onboardingComplete": zod.boolean()
-})
-})
-
-
-/**
- * @summary Invalidate the current session
- */
-export const LogoutResponse = zod.void()
-
-
-/**
+ * Identity is handled by Clerk. Send the Clerk session token as a bearer token; the first call provisions the marketplace account.
  * @summary The signed-in account
  */
 export const GetCurrentUserResponse = zod.object({
@@ -120,24 +45,27 @@ export const GetCurrentUserResponse = zod.object({
   "avatarUrl": zod.string().nullish(),
   "isClient": zod.boolean(),
   "isPractitioner": zod.boolean(),
-  "emailVerified": zod.boolean(),
   "activeRole": zod.enum(['client', 'practitioner']),
-  "onboardingStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
+  "onboardingStep": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
   "onboardingComplete": zod.boolean()
 })
 
 
 /**
- * @summary Move the current session between the client and practitioner portals
+ * @summary Complete client onboarding for the signed-in Clerk account
  */
-export const SwitchRoleBody = zod.object({
-  "role": zod.enum(['client', 'practitioner'])
-})
+export const registerClientBodyFullNameMin = 2;
 
-export const SwitchRoleResponse = zod.object({
-  "token": zod.string(),
-  "expiresAt": zod.coerce.date(),
-  "user": zod.object({
+
+
+export const RegisterClientBody = zod.object({
+  "fullName": zod.string().min(registerClientBodyFullNameMin).nullish(),
+  "timezone": zod.string(),
+  "country": zod.string().nullish(),
+  "phone": zod.string().nullish()
+}).describe('Details the app collects after Clerk sign-up. Name and email already live in Clerk; the name here overrides the mirrored one when given.')
+
+export const RegisterClientResponse = zod.object({
   "id": zod.string(),
   "email": zod.string(),
   "fullName": zod.string(),
@@ -147,27 +75,44 @@ export const SwitchRoleResponse = zod.object({
   "avatarUrl": zod.string().nullish(),
   "isClient": zod.boolean(),
   "isPractitioner": zod.boolean(),
-  "emailVerified": zod.boolean(),
   "activeRole": zod.enum(['client', 'practitioner']),
-  "onboardingStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
+  "onboardingStep": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
   "onboardingComplete": zod.boolean()
-})
 })
 
 
 /**
- * @summary Begin practitioner signup and send an email verification code
+ * @summary Move the account between the client and practitioner portals
+ */
+export const SwitchRoleBody = zod.object({
+  "role": zod.enum(['client', 'practitioner'])
+})
+
+export const SwitchRoleResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "fullName": zod.string(),
+  "phone": zod.string().nullish(),
+  "country": zod.string().nullish(),
+  "timezone": zod.string(),
+  "avatarUrl": zod.string().nullish(),
+  "isClient": zod.boolean(),
+  "isPractitioner": zod.boolean(),
+  "activeRole": zod.enum(['client', 'practitioner']),
+  "onboardingStep": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
+  "onboardingComplete": zod.boolean()
+})
+
+
+/**
+ * @summary Begin practitioner onboarding for the signed-in Clerk account
  */
 export const startPractitionerSignupBodyFullNameMin = 2;
-
-export const startPractitionerSignupBodyPasswordMin = 8;
 
 
 
 export const StartPractitionerSignupBody = zod.object({
-  "fullName": zod.string().min(startPractitionerSignupBodyFullNameMin),
-  "email": zod.email(),
-  "password": zod.string().min(startPractitionerSignupBodyPasswordMin),
+  "fullName": zod.string().min(startPractitionerSignupBodyFullNameMin).nullish(),
   "country": zod.string(),
   "phone": zod.string(),
   "timezone": zod.string()
@@ -175,7 +120,7 @@ export const StartPractitionerSignupBody = zod.object({
 
 export const StartPractitionerSignupResponse = zod.object({
   "email": zod.string(),
-  "currentStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']),
+  "currentStep": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']),
   "completed": zod.boolean(),
   "draft": zod.object({
   "modality": zod.enum(['mind', 'body', 'spirit', 'psychology']).optional(),
@@ -188,53 +133,8 @@ export const StartPractitionerSignupResponse = zod.object({
   "currency": zod.string().optional(),
   "location": zod.string().optional(),
   "timezone": zod.string().optional()
-}),
-  "devCode": zod.string().nullish().describe('The verification code, returned only when no email provider is configured so signup can still be completed in development. Always null once an email provider is connected.')
-})
-
-
-/**
- * @summary Confirm the emailed verification code
- */
-export const verifyPractitionerEmailBodyCodeMin = 6;
-export const verifyPractitionerEmailBodyCodeMax = 6;
-
-
-
-export const VerifyPractitionerEmailBody = zod.object({
-  "email": zod.email(),
-  "code": zod.string().min(verifyPractitionerEmailBodyCodeMin).max(verifyPractitionerEmailBodyCodeMax)
-})
-
-export const VerifyPractitionerEmailResponse = zod.object({
-  "token": zod.string(),
-  "expiresAt": zod.coerce.date(),
-  "user": zod.object({
-  "id": zod.string(),
-  "email": zod.string(),
-  "fullName": zod.string(),
-  "phone": zod.string().nullish(),
-  "country": zod.string().nullish(),
-  "timezone": zod.string(),
-  "avatarUrl": zod.string().nullish(),
-  "isClient": zod.boolean(),
-  "isPractitioner": zod.boolean(),
-  "emailVerified": zod.boolean(),
-  "activeRole": zod.enum(['client', 'practitioner']),
-  "onboardingStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']).optional(),
-  "onboardingComplete": zod.boolean()
 })
 })
-
-
-/**
- * @summary Send a fresh verification code
- */
-export const ResendPractitionerOtpBody = zod.object({
-  "email": zod.email()
-})
-
-export const ResendPractitionerOtpResponse = zod.void()
 
 
 /**
@@ -242,7 +142,7 @@ export const ResendPractitionerOtpResponse = zod.void()
  */
 export const GetPractitionerSignupProgressResponse = zod.object({
   "email": zod.string(),
-  "currentStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']),
+  "currentStep": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']),
   "completed": zod.boolean(),
   "draft": zod.object({
   "modality": zod.enum(['mind', 'body', 'spirit', 'psychology']).optional(),
@@ -255,8 +155,7 @@ export const GetPractitionerSignupProgressResponse = zod.object({
   "currency": zod.string().optional(),
   "location": zod.string().optional(),
   "timezone": zod.string().optional()
-}),
-  "devCode": zod.string().nullish().describe('The verification code, returned only when no email provider is configured so signup can still be completed in development. Always null once an email provider is connected.')
+})
 })
 
 
@@ -264,7 +163,7 @@ export const GetPractitionerSignupProgressResponse = zod.object({
  * @summary Save one step of the practitioner signup wizard
  */
 export const UpdatePractitionerSignupProgressBody = zod.object({
-  "step": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']),
+  "step": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']),
   "draft": zod.object({
   "modality": zod.enum(['mind', 'body', 'spirit', 'psychology']).optional(),
   "headline": zod.string().optional(),
@@ -281,7 +180,7 @@ export const UpdatePractitionerSignupProgressBody = zod.object({
 
 export const UpdatePractitionerSignupProgressResponse = zod.object({
   "email": zod.string(),
-  "currentStep": zod.enum(['account', 'verify_email', 'modality', 'headline', 'bio', 'details', 'complete']),
+  "currentStep": zod.enum(['account', 'modality', 'headline', 'bio', 'details', 'complete']),
   "completed": zod.boolean(),
   "draft": zod.object({
   "modality": zod.enum(['mind', 'body', 'spirit', 'psychology']).optional(),
@@ -294,8 +193,7 @@ export const UpdatePractitionerSignupProgressResponse = zod.object({
   "currency": zod.string().optional(),
   "location": zod.string().optional(),
   "timezone": zod.string().optional()
-}),
-  "devCode": zod.string().nullish().describe('The verification code, returned only when no email provider is configured so signup can still be completed in development. Always null once an email provider is connected.')
+})
 })
 
 

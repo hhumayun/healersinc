@@ -123,7 +123,6 @@ export type SignupStep = typeof SignupStep[keyof typeof SignupStep];
 
 export const SignupStep = {
   account: 'account',
-  verify_email: 'verify_email',
   modality: 'modality',
   headline: 'headline',
   bio: 'bio',
@@ -131,23 +130,20 @@ export const SignupStep = {
   complete: 'complete',
 } as const;
 
+/**
+ * Details the app collects after Clerk sign-up. Name and email already live in Clerk; the name here overrides the mirrored one when given.
+ */
 export interface ClientRegistration {
-  /** @minLength 2 */
-  fullName: string;
-  email: string;
-  /** @minLength 8 */
-  password: string;
+  /**
+     * @minLength 2
+     * @nullable
+     */
+  fullName?: string | null;
   timezone: string;
   /** @nullable */
   country?: string | null;
   /** @nullable */
   phone?: string | null;
-}
-
-export interface Credentials {
-  email: string;
-  password: string;
-  role: PortalRole;
 }
 
 export interface RoleSelection {
@@ -167,40 +163,20 @@ export interface CurrentUser {
   avatarUrl?: string | null;
   isClient: boolean;
   isPractitioner: boolean;
-  emailVerified: boolean;
   activeRole: PortalRole;
   onboardingStep?: SignupStep;
   onboardingComplete: boolean;
 }
 
-export interface AuthSession {
-  token: string;
-  expiresAt: string;
-  user: CurrentUser;
-}
-
 export interface PractitionerSignupStart {
-  /** @minLength 2 */
-  fullName: string;
-  email: string;
-  /** @minLength 8 */
-  password: string;
+  /**
+     * @minLength 2
+     * @nullable
+     */
+  fullName?: string | null;
   country: string;
   phone: string;
   timezone: string;
-}
-
-export interface OtpVerification {
-  email: string;
-  /**
-     * @minLength 6
-     * @maxLength 6
-     */
-  code: string;
-}
-
-export interface OtpResendRequest {
-  email: string;
 }
 
 export interface PractitionerSignupDraft {
@@ -226,11 +202,6 @@ export interface PractitionerSignupState {
   currentStep: SignupStep;
   completed: boolean;
   draft: PractitionerSignupDraft;
-  /**
-     * The verification code, returned only when no email provider is configured so signup can still be completed in development. Always null once an email provider is connected.
-     * @nullable
-     */
-  devCode?: string | null;
 }
 
 export interface ClientProfile {

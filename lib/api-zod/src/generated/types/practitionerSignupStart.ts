@@ -7,11 +7,11 @@
  */
 
 export interface PractitionerSignupStart {
-  /** @minLength 2 */
-  fullName: string;
-  email: string;
-  /** @minLength 8 */
-  password: string;
+  /**
+     * @minLength 2
+     * @nullable
+     */
+  fullName?: string | null;
   country: string;
   phone: string;
   timezone: string;

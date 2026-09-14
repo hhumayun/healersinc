@@ -57,12 +57,8 @@ function stripProtocol(domain) {
 }
 
 function getDeploymentDomain() {
-  if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
-  }
-
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_DEV_DOMAIN);
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return stripProtocol(process.env.EXPO_PUBLIC_API_URL);
   }
 
   if (process.env.EXPO_PUBLIC_DOMAIN) {
@@ -70,7 +66,7 @@ function getDeploymentDomain() {
   }
 
   console.error(
-    'ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN',
+    'ERROR: No API domain found. Set EXPO_PUBLIC_API_URL (or EXPO_PUBLIC_DOMAIN)',
   );
   process.exit(1);
 }
@@ -126,7 +122,7 @@ async function checkMetroHealth() {
 }
 
 function getExpoPublicReplId() {
-  return process.env.REPL_ID || process.env.EXPO_PUBLIC_REPL_ID;
+  return undefined;
 }
 
 async function startMetro(expoPublicDomain, expoPublicReplId) {

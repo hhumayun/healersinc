@@ -1,180 +1,80 @@
-import { randomBytes, randomInt, scrypt, timingSafeEqual, createHash } from "node:crypto";
-import { promisify } from "node:util";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import {
-  db,
-  emailOtpsTable,
-  sessionsTable,
-  usersTable,
-  type User,
-} from "@workspace/db";
+import { eq } from "drizzle-orm";
+import { db, usersTable, type User } from "@workspace/db";
 import type { PortalRole } from "@workspace/api-zod";
-import { OTP_MAX_ATTEMPTS, OTP_TTL_MINUTES, SESSION_TTL_DAYS } from "./config";
-import { badRequest, unauthorized } from "./errors";
-
-const scryptAsync = promisify(scrypt);
-const KEY_LENGTH = 64;
-
-/** `salt:derivedKey`, both hex. Scrypt keeps this slow enough to be safe. */
-export async function hashPassword(password: string): Promise<string> {
-  const salt = randomBytes(16).toString("hex");
-  const derived = (await scryptAsync(password, salt, KEY_LENGTH)) as Buffer;
-  return `${salt}:${derived.toString("hex")}`;
-}
-
-export async function verifyPassword(
-  password: string,
-  stored: string,
-): Promise<boolean> {
-  const [salt, key] = stored.split(":");
-  if (!salt || !key) return false;
-
-  const derived = (await scryptAsync(password, salt, KEY_LENGTH)) as Buffer;
-  const expected = Buffer.from(key, "hex");
-  if (expected.length !== derived.length) return false;
-
-  return timingSafeEqual(derived, expected);
-}
-
-/** Only the hash is stored, so a database leak cannot resurrect a session. */
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-export interface IssuedSession {
-  token: string;
-  expiresAt: Date;
-}
-
-export async function createSession(
-  userId: string,
-  role: PortalRole,
-): Promise<IssuedSession> {
-  const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 86_400_000);
-
-  await db.insert(sessionsTable).values({
-    userId,
-    tokenHash: hashToken(token),
-    activeRole: role,
-    expiresAt,
-  });
-
-  return { token, expiresAt };
-}
+import { fetchClerkProfile, verifyClerkSessionToken } from "./clerk";
+import { unauthorized } from "./errors";
+import { logger } from "./logger";
 
 export interface AuthContext {
   user: User;
-  sessionId: string;
   role: PortalRole;
 }
 
-export async function resolveSession(
-  token: string,
-): Promise<AuthContext | null> {
-  const rows = await db
-    .select({ session: sessionsTable, user: usersTable })
-    .from(sessionsTable)
-    .innerJoin(usersTable, eq(usersTable.id, sessionsTable.userId))
-    .where(
-      and(
-        eq(sessionsTable.tokenHash, hashToken(token)),
-        gt(sessionsTable.expiresAt, new Date()),
-      ),
-    )
+function toRole(value: string): PortalRole {
+  return value === "practitioner" ? "practitioner" : "client";
+}
+
+export async function findUserByClerkId(clerkUserId: string): Promise<User | null> {
+  const [user] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, clerkUserId))
     .limit(1);
-
-  const row = rows[0];
-  if (!row) return null;
-
-  return {
-    user: row.user,
-    sessionId: row.session.id,
-    role: row.session.activeRole as PortalRole,
-  };
-}
-
-export async function destroySession(sessionId: string): Promise<void> {
-  await db.delete(sessionsTable).where(eq(sessionsTable.id, sessionId));
-}
-
-export async function setSessionRole(
-  sessionId: string,
-  role: PortalRole,
-): Promise<void> {
-  await db
-    .update(sessionsTable)
-    .set({ activeRole: role })
-    .where(eq(sessionsTable.id, sessionId));
-}
-
-// ---------------------------------------------------------------------------
-// Email verification codes
-// ---------------------------------------------------------------------------
-
-export function generateOtpCode(): string {
-  return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
-
-/** Replaces any outstanding code for the address so only the newest works. */
-export async function issueOtp(email: string): Promise<string> {
-  const code = generateOtpCode();
-
-  await db
-    .update(emailOtpsTable)
-    .set({ consumedAt: new Date() })
-    .where(
-      and(eq(emailOtpsTable.email, email), isNull(emailOtpsTable.consumedAt)),
-    );
-
-  await db.insert(emailOtpsTable).values({
-    email,
-    codeHash: hashToken(code),
-    expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60_000),
-  });
-
-  return code;
+  return user ?? null;
 }
 
 /**
- * Consumes the newest unused code for the address. Attempts are counted so a
- * six-digit code cannot be brute-forced.
+ * Every Clerk account gets a local row the first time it calls the API. The
+ * row starts with no role: the client or practitioner onboarding endpoints
+ * grant one. Provisioning here (rather than only via webhook) means a brand
+ * new sign-up works even if the webhook is delayed.
  */
-export async function consumeOtp(email: string, code: string): Promise<void> {
-  const rows = await db
+export async function ensureLocalUser(clerkUserId: string): Promise<User> {
+  const existing = await findUserByClerkId(clerkUserId);
+  if (existing) return existing;
+
+  const profile = await fetchClerkProfile(clerkUserId);
+  const [created] = await db
+    .insert(usersTable)
+    .values({
+      clerkUserId,
+      email: profile.email,
+      fullName: profile.fullName,
+      avatarUrl: profile.avatarUrl,
+    })
+    .onConflictDoNothing({ target: usersTable.clerkUserId })
+    .returning();
+
+  if (created) {
+    logger.info({ userId: created.id, clerkUserId }, "Provisioned local user");
+    return created;
+  }
+  // Lost a race with a concurrent first request; the row exists now.
+  const [row] = await db
     .select()
-    .from(emailOtpsTable)
-    .where(
-      and(eq(emailOtpsTable.email, email), isNull(emailOtpsTable.consumedAt)),
-    )
-    .orderBy(sql`${emailOtpsTable.createdAt} desc`)
+    .from(usersTable)
+    .where(eq(usersTable.clerkUserId, clerkUserId))
     .limit(1);
+  if (!row) throw new Error("Could not provision the local user.");
+  return row;
+}
 
-  const record = rows[0];
-  if (!record) {
-    throw badRequest("That code has expired. Send yourself a new one.");
-  }
+/** Verifies a Clerk session JWT and loads (or provisions) the local account. */
+export async function resolveAuth(token: string): Promise<AuthContext | null> {
+  const clerkUserId = await verifyClerkSessionToken(token);
+  if (!clerkUserId) return null;
+  const user = await ensureLocalUser(clerkUserId);
+  return { user, role: toRole(user.activeRole) };
+}
 
-  if (record.expiresAt.getTime() < Date.now()) {
-    throw badRequest("That code has expired. Send yourself a new one.");
-  }
-
-  if (record.attempts >= OTP_MAX_ATTEMPTS) {
-    throw badRequest("Too many attempts. Send yourself a new code.");
-  }
-
-  if (record.codeHash !== hashToken(code)) {
-    await db
-      .update(emailOtpsTable)
-      .set({ attempts: record.attempts + 1 })
-      .where(eq(emailOtpsTable.id, record.id));
-    throw badRequest("That code is not right. Check the email and try again.");
-  }
-
-  await db
-    .update(emailOtpsTable)
-    .set({ consumedAt: new Date() })
-    .where(eq(emailOtpsTable.id, record.id));
+export async function setActiveRole(userId: string, role: PortalRole): Promise<User> {
+  const [updated] = await db
+    .update(usersTable)
+    .set({ activeRole: role })
+    .where(eq(usersTable.id, userId))
+    .returning();
+  if (!updated) throw new Error("User disappeared while switching role.");
+  return updated;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,8 +94,8 @@ export function requireAuth(auth: AuthContext | undefined): AuthContext {
 }
 
 /**
- * Authorization is always re-derived from the session on the server; the client
- * never tells us which role it is acting as.
+ * Authorization is always re-derived from the account on the server; the
+ * client never tells us which role it is acting as.
  */
 export function requireRole(
   auth: AuthContext | undefined,

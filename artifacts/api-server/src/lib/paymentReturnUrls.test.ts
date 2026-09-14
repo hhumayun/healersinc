@@ -38,18 +38,7 @@ test("web Checkout returns to the configured app route", () => {
   );
 });
 
-test("Expo development domain is allowed only outside production", () => {
-  assert.equal(
-    paymentWebReturnBaseUrl({
-      NODE_ENV: "development",
-      REPLIT_EXPO_DEV_DOMAIN: "preview.expo.example.com",
-    }),
-    "https://preview.expo.example.com/",
-  );
-  assert.throws(() =>
-    paymentWebReturnBaseUrl({
-      NODE_ENV: "production",
-      REPLIT_EXPO_DEV_DOMAIN: "preview.expo.example.com",
-    }),
-  );
+test("web Checkout requires an explicit return base URL", () => {
+  assert.throws(() => paymentWebReturnBaseUrl({ NODE_ENV: "development" }));
+  assert.throws(() => paymentWebReturnBaseUrl({ NODE_ENV: "production" }));
 });

@@ -56,11 +56,27 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppConfig"
 
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: The signed-in account
+      description: >-
+        Identity is handled by Clerk. Send the Clerk session token as a bearer
+        token; the first call provisions the marketplace account.
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+
   /auth/register:
     post:
       operationId: registerClient
       tags: [auth]
-      summary: Create a client account
+      summary: Complete client onboarding for the signed-in Clerk account
       requestBody:
         required: true
         content:
@@ -69,51 +85,7 @@ paths:
               $ref: "#/components/schemas/ClientRegistration"
       responses:
         "201":
-          description: Account created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuthSession"
-
-  /auth/login:
-    post:
-      operationId: login
-      tags: [auth]
-      summary: Sign in to a specific portal
-      description: >-
-        `role` selects which side of the marketplace the session opens in. An
-        account holding both roles can sign in to either.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Credentials"
-      responses:
-        "200":
-          description: Signed in
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuthSession"
-
-  /auth/logout:
-    post:
-      operationId: logout
-      tags: [auth]
-      summary: Invalidate the current session
-      responses:
-        "204":
-          description: Signed out
-
-  /auth/me:
-    get:
-      operationId: getCurrentUser
-      tags: [auth]
-      summary: The signed-in account
-      responses:
-        "200":
-          description: Current user
+          description: Client role granted
           content:
             application/json:
               schema:
@@ -123,7 +95,7 @@ paths:
     post:
       operationId: switchRole
       tags: [auth]
-      summary: Move the current session between the client and practitioner portals
+      summary: Move the account between the client and practitioner portals
       requestBody:
         required: true
         content:
@@ -132,17 +104,17 @@ paths:
               $ref: "#/components/schemas/RoleSelection"
       responses:
         "200":
-          description: Session updated
+          description: Account updated
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthSession"
+                $ref: "#/components/schemas/CurrentUser"
 
   /auth/practitioner/start:
     post:
       operationId: startPractitionerSignup
       tags: [auth]
-      summary: Begin practitioner signup and send an email verification code
+      summary: Begin practitioner onboarding for the signed-in Clerk account
       requestBody:
         required: true
         content:
@@ -151,45 +123,11 @@ paths:
               $ref: "#/components/schemas/PractitionerSignupStart"
       responses:
         "201":
-          description: Signup started, verification code sent
+          description: Signup started
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PractitionerSignupState"
-
-  /auth/practitioner/verify:
-    post:
-      operationId: verifyPractitionerEmail
-      tags: [auth]
-      summary: Confirm the emailed verification code
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OtpVerification"
-      responses:
-        "200":
-          description: Email verified and session issued
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuthSession"
-
-  /auth/practitioner/resend:
-    post:
-      operationId: resendPractitionerOtp
-      tags: [auth]
-      summary: Send a fresh verification code
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OtpResendRequest"
-      responses:
-        "204":
-          description: Code sent
 
   /auth/practitioner/progress:
     get:
@@ -1133,20 +1071,17 @@ components:
 
     SignupStep:
       type: string
-      enum: [account, verify_email, modality, headline, bio, details, complete]
+      enum: [account, modality, headline, bio, details, complete]
 
     ClientRegistration:
       type: object
+      description: >-
+        Details the app collects after Clerk sign-up. Name and email already
+        live in Clerk; the name here overrides the mirrored one when given.
       properties:
         fullName:
-          type: string
+          type: ["string", "null"]
           minLength: 2
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
         timezone:
           type: string
         country:
@@ -1154,25 +1089,7 @@ components:
         phone:
           type: ["string", "null"]
       required:
-        - fullName
-        - email
-        - password
         - timezone
-
-    Credentials:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-        role:
-          $ref: "#/components/schemas/PortalRole"
-      required:
-        - email
-        - password
-        - role
 
     RoleSelection:
       type: object
@@ -1181,21 +1098,6 @@ components:
           $ref: "#/components/schemas/PortalRole"
       required:
         - role
-
-    AuthSession:
-      type: object
-      properties:
-        token:
-          type: string
-        expiresAt:
-          type: string
-          format: date-time
-        user:
-          $ref: "#/components/schemas/CurrentUser"
-      required:
-        - token
-        - expiresAt
-        - user
 
     CurrentUser:
       type: object
@@ -1218,8 +1120,6 @@ components:
           type: boolean
         isPractitioner:
           type: boolean
-        emailVerified:
-          type: boolean
         activeRole:
           $ref: "#/components/schemas/PortalRole"
         onboardingStep:
@@ -1233,7 +1133,6 @@ components:
         - timezone
         - isClient
         - isPractitioner
-        - emailVerified
         - activeRole
         - onboardingComplete
 
@@ -1241,14 +1140,8 @@ components:
       type: object
       properties:
         fullName:
-          type: string
+          type: ["string", "null"]
           minLength: 2
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
         country:
           type: string
         phone:
@@ -1256,35 +1149,9 @@ components:
         timezone:
           type: string
       required:
-        - fullName
-        - email
-        - password
         - country
         - phone
         - timezone
-
-    OtpVerification:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        code:
-          type: string
-          minLength: 6
-          maxLength: 6
-      required:
-        - email
-        - code
-
-    OtpResendRequest:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-      required:
-        - email
 
     PractitionerSignupDraft:
       type: object
@@ -1338,12 +1205,6 @@ components:
           type: boolean
         draft:
           $ref: "#/components/schemas/PractitionerSignupDraft"
-        devCode:
-          type: ["string", "null"]
-          description: >-
-            The verification code, returned only when no email provider is
-            configured so signup can still be completed in development. Always
-            null once an email provider is connected.
       required:
         - email
         - currentStep

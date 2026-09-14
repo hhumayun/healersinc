@@ -37,6 +37,7 @@ import {
 import { isValidTimeZone, safeZone } from "@workspace/scheduling";
 import { requireRole } from "../lib/auth";
 import { badRequest, conflict, handler, notFound } from "../lib/errors";
+import { publicApiBaseUrl } from "../lib/publicUrl";
 import { requireCalendarRange } from "../lib/query";
 import { toAppointment, toAvailabilityException, toService } from "../lib/serializers";
 import { getUncachableStripeClient } from "../stripeClient";
@@ -494,8 +495,7 @@ router.post(
     if (!country || !countryIsEligible(country)) {
       throw conflict("In-app payments are not available in your country yet.");
     }
-    const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim();
-    if (!domain) throw new Error("REPLIT_DOMAINS is required for payment onboarding.");
+    const apiBaseUrl = publicApiBaseUrl();
     const stripe = await getUncachableStripeClient();
     const countrySpec = await stripe.countrySpecs.retrieve(country);
     if (!countrySpec.supported_payment_methods.includes("card")) {
@@ -518,7 +518,7 @@ router.post(
       } else {
         account = await refreshStripePaymentAccount(auth.user.id, account, stripe);
       }
-      const baseUrl = `https://${domain}`;
+      const baseUrl = apiBaseUrl;
       if (account.accountApiVersion === "v2") {
         const link = await stripe.v2.core.accountLinks.create(
           v2RecipientAccountLinkParams({

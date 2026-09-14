@@ -33,7 +33,6 @@ export const availabilityExceptionKindEnum = pgEnum(
 /** Steps of the resumable practitioner signup wizard, in order. */
 export const signupStepEnum = pgEnum("signup_step", [
   "account",
-  "verify_email",
   "modality",
   "headline",
   "bio",

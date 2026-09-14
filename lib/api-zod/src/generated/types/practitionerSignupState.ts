@@ -13,9 +13,4 @@ export interface PractitionerSignupState {
   currentStep: SignupStep;
   completed: boolean;
   draft: PractitionerSignupDraft;
-  /**
-     * The verification code, returned only when no email provider is configured so signup can still be completed in development. Always null once an email provider is connected.
-     * @nullable
-     */
-  devCode?: string | null;
 }

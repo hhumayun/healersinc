@@ -6,12 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * Details the app collects after Clerk sign-up. Name and email already live in Clerk; the name here overrides the mirrored one when given.
+ */
 export interface ClientRegistration {
-  /** @minLength 2 */
-  fullName: string;
-  email: string;
-  /** @minLength 8 */
-  password: string;
+  /**
+     * @minLength 2
+     * @nullable
+     */
+  fullName?: string | null;
   timezone: string;
   /** @nullable */
   country?: string | null;

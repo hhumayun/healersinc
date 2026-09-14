@@ -21,7 +21,6 @@ export interface CurrentUser {
   avatarUrl?: string | null;
   isClient: boolean;
   isPractitioner: boolean;
-  emailVerified: boolean;
   activeRole: PortalRole;
   onboardingStep?: SignupStep;
   onboardingComplete: boolean;

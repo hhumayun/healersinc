@@ -8,6 +8,7 @@ import { emailProviderConfigured } from "./lib/email";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./stripeClient";
 import { paymentPolicy } from "./lib/paymentPolicy";
+import { publicApiBaseUrl } from "./lib/publicUrl";
 import {
   processPendingRefunds,
   startRefundWorker,
@@ -34,9 +35,8 @@ async function main(): Promise<void> {
 
   if (paymentPolicy.enabled) {
     const databaseUrl = process.env["DATABASE_URL"];
-    const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim();
     if (!databaseUrl) throw new Error("DATABASE_URL is required for payments.");
-    if (!domain) throw new Error("REPLIT_DOMAINS is required for Stripe webhooks.");
+    const apiBaseUrl = publicApiBaseUrl();
     logger.info("Initializing Stripe synchronization");
     await runMigrations({ databaseUrl, logger });
     const stripeSync = await getStripeSync();
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
       "refund.updated",
     ] as const;
     await stripeSync.findOrCreateManagedWebhook(
-      `https://${domain}/api/webhooks/stripe`,
+      `${apiBaseUrl}/api/webhooks/stripe`,
       { enabled_events: [...new Set(enabledEvents)] },
     );
     await stripeSync.syncBackfill();

@@ -59,19 +59,6 @@ export async function sendEmail(email: OutboundEmail): Promise<void> {
   }
 }
 
-export function verificationEmail(code: string): Omit<OutboundEmail, "to"> {
-  return {
-    subject: `${code} is your Healers Inc verification code`,
-    text: [
-      "Welcome to Healers Inc.",
-      "",
-      `Your verification code is ${code}.`,
-      "",
-      "It expires in 10 minutes. If you did not start creating a practitioner account, you can ignore this email.",
-    ].join("\n"),
-  };
-}
-
 export interface ReminderEmailInput {
   recipientName: string;
   counterpartName: string;

@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { Message, Notification } from "@workspace/api-zod";
-import { resolveSession } from "./auth";
+import { resolveAuth } from "./auth";
 import { logger } from "./logger";
 
 /** Everything the mobile app can be told about without polling. */
@@ -45,8 +45,10 @@ export function publishToUser(userId: string, event: RealtimeEvent): void {
 
 /**
  * Chat and notifications ride a WebSocket at `/api/ws`. React Native cannot set
- * headers on a WebSocket handshake, so the session token arrives as a query
- * parameter and is verified here before the upgrade is accepted.
+ * headers on a WebSocket handshake, so the Clerk session token arrives as a
+ * query parameter and is verified here before the upgrade is accepted. The
+ * token is short-lived, but it only has to be valid at handshake time; the
+ * client fetches a fresh one whenever it reconnects.
  */
 export function attachRealtime(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
@@ -65,7 +67,7 @@ export function attachRealtime(server: Server): void {
       return;
     }
 
-    resolveSession(token)
+    resolveAuth(token)
       .then((auth) => {
         if (!auth) {
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

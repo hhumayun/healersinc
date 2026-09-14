@@ -8,6 +8,7 @@ import { logger } from "./lib/logger";
 import { errorHandler } from "./lib/errors";
 import { WebhookHandlers } from "./webhookHandlers";
 import { paymentPolicy } from "./lib/paymentPolicy";
+import clerkWebhookRouter from "./routes/clerkWebhook";
 
 const app: Express = express();
 
@@ -54,6 +55,7 @@ app.post(
     }
   },
 );
+app.use("/api", express.raw({ type: "application/json" }), clerkWebhookRouter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

@@ -7,7 +7,7 @@ import {
   getListAppointmentsQueryKey,
 } from '@workspace/api-client-react';
 
-import { realtimeUrl } from '@/lib/api';
+import { getSessionToken, realtimeUrl } from '@/lib/api';
 import { useSession } from '@/lib/session';
 
 type RealtimeEvent =
@@ -22,19 +22,33 @@ type RealtimeEvent =
  * the root; every event simply invalidates the queries it affects.
  */
 export function useRealtime(): void {
-  const { token, status } = useSession();
+  const { status } = useSession();
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!token || status !== 'authenticated') return;
+    if (status !== 'authenticated') return;
 
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
     let attempts = 0;
 
-    const connect = () => {
+    const scheduleRetry = () => {
       if (closed) return;
+      attempts += 1;
+      const delay = Math.min(15_000, 1_000 * 2 ** Math.min(attempts, 4));
+      retry = setTimeout(() => void connect(), delay);
+    };
+
+    const connect = async () => {
+      if (closed) return;
+      // Clerk tokens are short-lived, so every (re)connect needs a fresh one.
+      const token = await getSessionToken();
+      if (closed) return;
+      if (!token) {
+        scheduleRetry();
+        return;
+      }
       socket = new WebSocket(realtimeUrl(token));
 
       socket.onopen = () => {
@@ -84,19 +98,16 @@ export function useRealtime(): void {
       };
 
       socket.onclose = () => {
-        if (closed) return;
-        attempts += 1;
-        const delay = Math.min(15_000, 1_000 * 2 ** Math.min(attempts, 4));
-        retry = setTimeout(connect, delay);
+        scheduleRetry();
       };
     };
 
-    connect();
+    void connect();
 
     return () => {
       closed = true;
       if (retry) clearTimeout(retry);
       socket?.close();
     };
-  }, [token, status, queryClient]);
+  }, [status, queryClient]);
 }

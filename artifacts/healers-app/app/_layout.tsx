@@ -7,6 +7,8 @@ import { KeyboardProviderCompat } from '@/components/KeyboardProviderCompat';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { ClerkProvider } from '@clerk/clerk-expo';
+import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { useHealersFonts } from '@workspace/healers-inc/hooks/use-fonts';
 import {
   ThemeProvider,
@@ -17,6 +19,14 @@ import {
 import '@/lib/api';
 import { useRealtime } from '@/hooks/useRealtime';
 import { SessionProvider } from '@/lib/session';
+
+const clerkPublishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+if (!clerkPublishableKey) {
+  throw new Error(
+    'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is required. Copy it from the Clerk dashboard.',
+  );
+}
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -91,17 +101,19 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <SessionProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <KeyboardProviderCompat>
-                  <RootLayoutNav />
-                </KeyboardProviderCompat>
-              </GestureHandlerRootView>
-            </SessionProvider>
-          </ThemeProvider>
-        </QueryClientProvider>
+        <ClerkProvider publishableKey={clerkPublishableKey} tokenCache={tokenCache}>
+          <QueryClientProvider client={queryClient}>
+            <ThemeProvider>
+              <SessionProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <KeyboardProviderCompat>
+                    <RootLayoutNav />
+                  </KeyboardProviderCompat>
+                </GestureHandlerRootView>
+              </SessionProvider>
+            </ThemeProvider>
+          </QueryClientProvider>
+        </ClerkProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

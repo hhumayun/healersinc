@@ -8,8 +8,7 @@
  *
  * Run with: pnpm --filter @workspace/api-server run seed
  */
-import { randomUUID, scrypt } from "node:crypto";
-import { promisify } from "node:util";
+import { randomUUID } from "node:crypto";
 import { DateTime } from "luxon";
 import { avg, count, eq, sql } from "drizzle-orm";
 import {
@@ -22,29 +21,25 @@ import {
   clientProfilesTable,
   conversationsTable,
   db,
-  emailOtpsTable,
   messagesTable,
   notificationsTable,
   practitionerProfilesTable,
   practitionerSignupProgressTable,
   reviewsTable,
   servicesTable,
-  sessionsTable,
   userBlocksTable,
   userReportsTable,
   usersTable,
 } from "@workspace/db";
 import { blockRange, generateSlots } from "@workspace/scheduling";
 
-const scryptAsync = promisify(scrypt);
-
-/** Every seeded account uses this password. */
-const SEED_PASSWORD = "Healers2026!";
-
-async function hashPassword(password: string): Promise<string> {
-  const salt = randomUUID().replace(/-/g, "");
-  const derived = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${salt}:${derived.toString("hex")}`;
+/**
+ * Seeded accounts are demo content, not sign-in targets: identity lives in
+ * Clerk, so they get a synthetic Clerk id and can be browsed and booked but
+ * never signed into. Create real accounts through the app.
+ */
+function seedClerkId(slug: string): string {
+  return `seed_${slug}`;
 }
 
 type Modality = "mind" | "body" | "spirit" | "psychology";
@@ -348,8 +343,6 @@ async function wipe(): Promise<void> {
   await db.delete(practitionerSignupProgressTable);
   await db.delete(practitionerProfilesTable);
   await db.delete(clientProfilesTable);
-  await db.delete(sessionsTable);
-  await db.delete(emailOtpsTable);
   await db.delete(usersTable);
 }
 
@@ -363,21 +356,20 @@ async function main(): Promise<void> {
   await applyDatabaseConstraints();
   await wipe();
 
-  const passwordHash = await hashPassword(SEED_PASSWORD);
   const built: BuiltPractitioner[] = [];
 
   for (const seed of PRACTITIONERS) {
     const [user] = await db
       .insert(usersTable)
       .values({
+        clerkUserId: seedClerkId(seed.slug),
         email: seed.email,
-        passwordHash,
         fullName: seed.fullName,
         country: seed.country,
         timezone: seed.timezone,
         avatarUrl: `${AVATAR_BASE}/${seed.slug}.jpg`,
         isPractitioner: true,
-        emailVerified: true,
+        activeRole: "practitioner",
       })
       .returning();
 
@@ -457,13 +449,12 @@ async function main(): Promise<void> {
     const [user] = await db
       .insert(usersTable)
       .values({
+        clerkUserId: seedClerkId(seed.email.split("@")[0] ?? seed.email),
         email: seed.email,
-        passwordHash,
         fullName: seed.fullName,
         country: seed.country,
         timezone: seed.timezone,
         isClient: true,
-        emailVerified: true,
       })
       .returning();
 
@@ -486,7 +477,7 @@ async function main(): Promise<void> {
   await refreshRatings(built.map((entry) => entry.userId));
 
   console.log(
-    `Seeded ${built.length} practitioners and ${clientIds.length} clients. Password for every account: ${SEED_PASSWORD}`,
+    `Seeded ${built.length} practitioners and ${clientIds.length} clients. Seeded accounts are demo content only; sign in with a Clerk account.`,
   );
 }
 

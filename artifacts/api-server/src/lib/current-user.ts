@@ -40,7 +40,6 @@ export function toCurrentUser(
     avatarUrl: user.avatarUrl,
     isClient: user.isClient,
     isPractitioner: user.isPractitioner,
-    emailVerified: user.emailVerified,
     activeRole: role,
     onboardingStep: (progress?.currentStep ?? "complete") as SignupStep,
     onboardingComplete,

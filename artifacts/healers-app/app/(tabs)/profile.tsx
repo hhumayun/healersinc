@@ -2,11 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import {
-  useLogout,
-  useSwitchRole,
-  type PortalRole,
-} from '@workspace/api-client-react';
+import { useSwitchRole, type PortalRole } from '@workspace/api-client-react';
 import {
   elevation,
   radii,
@@ -128,9 +124,8 @@ function HubGroup({ children }: { children: React.ReactNode }) {
 export default function ProfileScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { user, status, refreshUser, signOut } = useSession();
+  const { user, status, refreshUser, signOut, applyUser } = useSession();
   const switchRole = useSwitchRole();
-  const logout = useLogout();
   const [switchError, setSwitchError] = useState<string | null>(null);
 
   const holdsBothRoles = !!user?.isClient && !!user?.isPractitioner;
@@ -141,8 +136,8 @@ export default function ProfileScreen() {
     switchRole.mutate(
       { data: { role } },
       {
-        onSuccess: async () => {
-          await refreshUser();
+        onSuccess: async (next) => {
+          await applyUser(next);
           router.replace('/');
         },
         onError: (error) => setSwitchError(errorMessage(error)),
@@ -159,12 +154,8 @@ export default function ProfileScreen() {
     });
     if (!ok) return;
 
-    logout.mutate(undefined, {
-      onSettled: async () => {
-        await signOut();
-        router.replace('/');
-      },
-    });
+    await signOut();
+    router.replace('/');
   };
 
   if (status === 'loading' || !user) {

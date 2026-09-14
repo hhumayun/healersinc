@@ -11,14 +11,6 @@ export const PAYMENTS_ENABLED = paymentPolicy.enabled;
 
 export const DEFAULT_CURRENCY = "USD";
 
-/** Session lifetime for a mobile bearer token. */
-export const SESSION_TTL_DAYS = 30;
-
-/** How long an emailed verification code stays valid. */
-export const OTP_TTL_MINUTES = 10;
-
-export const OTP_MAX_ATTEMPTS = 5;
-
 export const MODALITIES: ModalityInfo[] = [
   {
     value: "mind",

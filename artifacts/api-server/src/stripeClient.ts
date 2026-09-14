@@ -7,59 +7,31 @@ interface StripeCredentials {
   webhookSecret?: string;
 }
 
-/** Fetch fresh connector credentials for every operation so rotations take effect. */
-export async function getStripeCredentials(): Promise<StripeCredentials> {
-  const hostname = process.env["REPLIT_CONNECTORS_HOSTNAME"];
-  const token = process.env["REPL_IDENTITY"]
-    ? `repl ${process.env["REPL_IDENTITY"]}`
-    : process.env["WEB_REPL_RENEWAL"]
-      ? `depl ${process.env["WEB_REPL_RENEWAL"]}`
-      : null;
-
-  if (!hostname || !token) {
-    throw new Error("Stripe integration credentials are unavailable.");
-  }
-
-  const response = await fetch(
-    `https://${hostname}/api/v2/connection?include_secrets=true&connector_names=stripe`,
-    {
-      headers: { Accept: "application/json", X_REPLIT_TOKEN: token },
-      signal: AbortSignal.timeout(10_000),
-    },
-  );
-  if (!response.ok) {
-    throw new Error(`Could not fetch Stripe credentials (${response.status}).`);
-  }
-
-  const data = (await response.json()) as {
-    items?: Array<{
-      settings?: {
-        secret?: string;
-        secret_key?: string;
-        webhook_secret?: string;
-      };
-    }>;
-  };
-  const settings = data.items?.[0]?.settings;
-  const secretKey = settings?.secret ?? settings?.secret_key;
+/**
+ * Stripe keys come straight from the environment. `STRIPE_WEBHOOK_SECRET` is
+ * optional on first boot: the sync layer registers a managed webhook endpoint
+ * against `PUBLIC_API_URL` and stores its signing secret itself.
+ */
+export function getStripeCredentials(): StripeCredentials {
+  const secretKey = process.env["STRIPE_SECRET_KEY"]?.trim();
   if (!secretKey) {
-    throw new Error("Stripe integration is not connected.");
+    throw new Error("STRIPE_SECRET_KEY is required when payments are enabled.");
   }
   return {
     secretKey,
-    webhookSecret: settings?.webhook_secret,
+    webhookSecret: process.env["STRIPE_WEBHOOK_SECRET"]?.trim() || undefined,
   };
 }
 
 export async function getUncachableStripeClient(): Promise<Stripe> {
-  const { secretKey } = await getStripeCredentials();
+  const { secretKey } = getStripeCredentials();
   return new Stripe(secretKey);
 }
 
 export async function getStripeSync(): Promise<StripeSync> {
   const databaseUrl = process.env["DATABASE_URL"];
   if (!databaseUrl) throw new Error("DATABASE_URL is required for Stripe sync.");
-  const { secretKey, webhookSecret } = await getStripeCredentials();
+  const { secretKey, webhookSecret } = getStripeCredentials();
   return new StripeSync({
     poolConfig: { connectionString: databaseUrl },
     stripeSecretKey: secretKey,

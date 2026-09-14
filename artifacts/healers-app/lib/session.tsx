@@ -8,127 +8,107 @@ import React, {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@clerk/clerk-expo';
 import {
   getGetCurrentUserQueryKey,
-  setUnauthorizedHandler,
   useGetCurrentUser,
-  type AuthSession,
   type CurrentUser,
   type PortalRole,
 } from '@workspace/api-client-react';
 
-import { setSessionToken } from '@/lib/api';
-import { clearToken, readToken, writeToken } from '@/lib/token-store';
+import { setSessionTokenGetter } from '@/lib/api';
 
 export type SessionStatus = 'loading' | 'authenticated' | 'anonymous';
 
 type SessionValue = {
   status: SessionStatus;
-  token: string | null;
+  /** True once Clerk has a signed-in user, even before the API profile loads. */
+  isSignedIn: boolean;
   user: CurrentUser | null;
   role: PortalRole | null;
   isPractitionerPortal: boolean;
-  signIn: (session: AuthSession) => Promise<void>;
+  /** Seed the cache with a profile just returned by an onboarding call. */
+  applyUser: (user: CurrentUser) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<unknown>;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
 
+/**
+ * Clerk owns sign-in and the session token; this provider layers the
+ * marketplace account (`/auth/me`) on top and keeps the fetch layer supplied
+ * with a fresh token.
+ */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const [token, setToken] = useState<string | null>(null);
-  const [restoring, setRestoring] = useState(true);
+  const { isLoaded, isSignedIn, getToken, signOut: clerkSignOut } = useAuth();
+  const signedIn = Boolean(isSignedIn);
+  const [ready, setReady] = useState(false);
 
+  // Register the token getter before any screen can fire a query.
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      const stored = await readToken();
-      if (!active) return;
-      if (stored) {
-        setSessionToken(stored);
-        setToken(stored);
-      }
-      setRestoring(false);
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+    setSessionTokenGetter(signedIn ? () => getToken() : null);
+    setReady(true);
+    return () => setSessionTokenGetter(null);
+  }, [getToken, signedIn]);
 
   const userQuery = useGetCurrentUser({
     query: {
       queryKey: getGetCurrentUserQueryKey(),
-      enabled: !!token && !restoring,
-      retry: false,
+      enabled: isLoaded && ready && signedIn,
+      retry: 1,
       staleTime: 60_000,
     },
   });
 
-  const clear = useCallback(async () => {
-    await clearToken();
-    setSessionToken(null);
-    setToken(null);
-    queryClient.clear();
-  }, [queryClient]);
-
-  // Any 401 anywhere in the app means the session is gone, not just a failing
-  // /auth/me: sign out from one place so no screen is left half-authenticated.
-  useEffect(() => {
-    setUnauthorizedHandler(() => {
-      void clear();
-    });
-    return () => setUnauthorizedHandler(null);
-  }, [clear]);
-
-  // An expired or revoked token should drop us back to the sign-in screen.
-  useEffect(() => {
-    if (token && userQuery.isError) {
-      void clear();
+  const signOut = useCallback(async () => {
+    try {
+      await clerkSignOut();
+    } finally {
+      queryClient.clear();
     }
-  }, [token, userQuery.isError, clear]);
+  }, [clerkSignOut, queryClient]);
 
-  const signIn = useCallback(
-    async (session: AuthSession) => {
-      await writeToken(session.token);
-      setSessionToken(session.token);
-      setToken(session.token);
-      queryClient.setQueryData(getGetCurrentUserQueryKey(), session.user);
+  const applyUser = useCallback(
+    async (user: CurrentUser) => {
+      queryClient.setQueryData(getGetCurrentUserQueryKey(), user);
       await queryClient.invalidateQueries();
     },
     [queryClient],
   );
 
   const value = useMemo<SessionValue>(() => {
-    const user = token ? (userQuery.data ?? null) : null;
-    const status: SessionStatus = restoring
-      ? 'loading'
-      : !token
-        ? 'anonymous'
-        : user
-          ? 'authenticated'
-          : userQuery.isError
-            ? 'anonymous'
-            : 'loading';
+    const user = signedIn ? (userQuery.data ?? null) : null;
+    const status: SessionStatus =
+      !isLoaded || !ready
+        ? 'loading'
+        : !signedIn
+          ? 'anonymous'
+          : user
+            ? 'authenticated'
+            : userQuery.isError
+              ? 'anonymous'
+              : 'loading';
 
     return {
       status,
-      token,
+      isSignedIn: signedIn,
       user,
       role: user?.activeRole ?? null,
       isPractitionerPortal: user?.activeRole === 'practitioner',
-      signIn,
-      signOut: clear,
+      applyUser,
+      signOut,
       refreshUser: () => userQuery.refetch(),
     };
-  }, [token, restoring, userQuery.data, userQuery.isError, signIn, clear, userQuery]);
+  }, [isLoaded, ready, signedIn, userQuery, applyUser, signOut]);
 
-  // Nothing renders until the stored token is back in place: a screen that
-  // mounted first would fire its queries without an Authorization header and
-  // get a 401 it cannot recover from.
+  // Nothing renders until Clerk has restored its session and the token getter
+  // is in place: a screen that mounted first would fire its queries without an
+  // Authorization header and get a 401 it cannot recover from.
   return (
     <SessionContext.Provider value={value}>
-      {restoring ? null : children}
+      {isLoaded && ready ? children : null}
     </SessionContext.Provider>
   );
 }
@@ -142,4 +122,13 @@ export function useSession(): SessionValue {
 /** Convenience for screens that are only reachable when signed in. */
 export function useCurrentUser(): CurrentUser | null {
   return useSession().user;
+}
+
+/** The device's IANA time zone, used to default new accounts. */
+export function deviceTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }

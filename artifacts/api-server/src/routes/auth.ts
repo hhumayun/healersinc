@@ -12,38 +12,29 @@ import {
   type User,
 } from "@workspace/db";
 import {
-  LoginBody,
   RegisterClientBody,
-  ResendPractitionerOtpBody,
   StartPractitionerSignupBody,
   SwitchRoleBody,
   UpdateClientProfileBody,
   UpdatePractitionerSignupProgressBody,
-  VerifyPractitionerEmailBody,
-  type AuthSession,
   type ClientProfile,
+  type CurrentUser,
   type PractitionerSignupDraft,
   type PractitionerSignupState,
 } from "@workspace/api-zod";
 import { isValidTimeZone, safeZone } from "@workspace/scheduling";
-import {
-  consumeOtp,
-  createSession,
-  destroySession,
-  hashPassword,
-  issueOtp,
-  requireAuth,
-  setSessionRole,
-  verifyPassword,
-} from "../lib/auth";
-import { badRequest, conflict, handler, notFound, unauthorized } from "../lib/errors";
-import { emailProviderConfigured, sendEmail, verificationEmail } from "../lib/email";
+import { requireAuth, setActiveRole } from "../lib/auth";
+import { badRequest, conflict, handler } from "../lib/errors";
 import { loadSignupProgress, toCurrentUser } from "../lib/current-user";
 import { DEFAULT_CURRENCY } from "../lib/config";
 
+/**
+ * Identity (sign-up, sign-in, passwords, email verification, sign-out) is
+ * handled by Clerk on the device. These endpoints only deal with what the
+ * marketplace layers on top: which roles an account holds, the practitioner
+ * onboarding wizard, and the client profile.
+ */
 const router: IRouter = Router();
-
-const normaliseEmail = (email: string): string => email.trim().toLowerCase();
 
 function assertTimezone(timezone: string): string {
   if (!isValidTimeZone(timezone)) {
@@ -52,176 +43,66 @@ function assertTimezone(timezone: string): string {
   return timezone;
 }
 
-async function findUserByEmail(email: string): Promise<User | null> {
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
-  return user ?? null;
-}
-
-async function issueAuthSession(
-  user: User,
-  role: "client" | "practitioner",
-): Promise<AuthSession> {
-  const session = await createSession(user.id, role);
+async function currentUser(user: User): Promise<CurrentUser> {
   const progress = user.isPractitioner ? await loadSignupProgress(user.id) : null;
-
-  return {
-    token: session.token,
-    expiresAt: session.expiresAt,
-    user: toCurrentUser(user, role, progress),
-  };
+  const role = user.activeRole === "practitioner" ? "practitioner" : "client";
+  return toCurrentUser(user, role, progress);
 }
 
 function toSignupState(
   user: User,
   progress: PractitionerSignupProgress | null,
-  devCode?: string | null,
 ): PractitionerSignupState {
   return {
     email: user.email,
     currentStep: progress?.currentStep ?? "account",
     completed: Boolean(progress?.completedAt),
     draft: (progress?.draft ?? {}) as PractitionerSignupDraft,
-    devCode: devCode ?? null,
   };
 }
 
-/** Emails the code, or hands it back in development where there is no mailer. */
-async function deliverVerificationCode(email: string): Promise<string | null> {
-  const code = await issueOtp(email);
-  await sendEmail({ to: email, ...verificationEmail(code) });
-  return emailProviderConfigured ? null : code;
-}
-
 // ---------------------------------------------------------------------------
-// Client accounts
+// Account
 // ---------------------------------------------------------------------------
-
-router.post(
-  "/auth/register",
-  handler(async (req, res) => {
-    const body = RegisterClientBody.parse(req.body);
-    const email = normaliseEmail(body.email);
-    assertTimezone(body.timezone);
-
-    const existing = await findUserByEmail(email);
-
-    if (existing) {
-      const passwordMatches = await verifyPassword(
-        body.password,
-        existing.passwordHash,
-      );
-      if (!passwordMatches) {
-        throw conflict(
-          "An account already exists with this email. Sign in instead.",
-          "email_taken",
-        );
-      }
-      if (existing.isClient) {
-        throw conflict(
-          "You already have a client account. Sign in instead.",
-          "email_taken",
-        );
-      }
-
-      // A practitioner adding the client side of the marketplace.
-      const [updated] = await db
-        .update(usersTable)
-        .set({ isClient: true })
-        .where(eq(usersTable.id, existing.id))
-        .returning();
-
-      await db
-        .insert(clientProfilesTable)
-        .values({ userId: existing.id, onboardedAt: new Date() })
-        .onConflictDoNothing();
-
-      res.status(201).json(await issueAuthSession(updated ?? existing, "client"));
-      return;
-    }
-
-    const [user] = await db
-      .insert(usersTable)
-      .values({
-        email,
-        passwordHash: await hashPassword(body.password),
-        fullName: body.fullName.trim(),
-        timezone: body.timezone,
-        country: body.country ?? null,
-        phone: body.phone ?? null,
-        isClient: true,
-        emailVerified: true,
-      })
-      .returning();
-
-    if (!user) throw badRequest("We could not create that account.");
-
-    await db
-      .insert(clientProfilesTable)
-      .values({ userId: user.id, onboardedAt: new Date() });
-
-    res.status(201).json(await issueAuthSession(user, "client"));
-  }),
-);
-
-router.post(
-  "/auth/login",
-  handler(async (req, res) => {
-    const body = LoginBody.parse(req.body);
-    const email = normaliseEmail(body.email);
-
-    const user = await findUserByEmail(email);
-    const passwordMatches = user
-      ? await verifyPassword(body.password, user.passwordHash)
-      : false;
-
-    if (!user || !passwordMatches) {
-      throw unauthorized("That email and password do not match.");
-    }
-
-    if (body.role === "practitioner") {
-      if (!user.isPractitioner) {
-        throw unauthorized(
-          "This email is registered as a client. Use the client sign in.",
-        );
-      }
-      if (!user.emailVerified) {
-        throw unauthorized(
-          "Please verify your email address to finish setting up your practice.",
-        );
-      }
-    }
-
-    if (body.role === "client" && !user.isClient) {
-      throw unauthorized(
-        "This email is registered as a practitioner. Use the practitioner sign in.",
-      );
-    }
-
-    res.json(await issueAuthSession(user, body.role));
-  }),
-);
-
-router.post(
-  "/auth/logout",
-  handler(async (req, res) => {
-    if (req.auth) await destroySession(req.auth.sessionId);
-    res.status(204).end();
-  }),
-);
 
 router.get(
   "/auth/me",
   handler(async (req, res) => {
     const auth = requireAuth(req.auth);
-    const progress = auth.user.isPractitioner
-      ? await loadSignupProgress(auth.user.id)
-      : null;
+    res.json(await currentUser(auth.user));
+  }),
+);
 
-    res.json(toCurrentUser(auth.user, auth.role, progress));
+/**
+ * Turns a freshly signed-up Clerk account into a client. Idempotent: calling
+ * it again simply refreshes the details and switches to the client portal.
+ */
+router.post(
+  "/auth/register",
+  handler(async (req, res) => {
+    const auth = requireAuth(req.auth);
+    const body = RegisterClientBody.parse(req.body);
+    assertTimezone(body.timezone);
+
+    const [updated] = await db
+      .update(usersTable)
+      .set({
+        fullName: body.fullName?.trim() || auth.user.fullName,
+        timezone: body.timezone,
+        country: body.country ?? auth.user.country,
+        phone: body.phone ?? auth.user.phone,
+        isClient: true,
+        activeRole: "client",
+      })
+      .where(eq(usersTable.id, auth.user.id))
+      .returning();
+
+    await db
+      .insert(clientProfilesTable)
+      .values({ userId: auth.user.id, onboardedAt: new Date() })
+      .onConflictDoNothing();
+
+    res.status(201).json(await currentUser(updated ?? auth.user));
   }),
 );
 
@@ -256,8 +137,8 @@ router.post(
       if (updated) user = updated;
     }
 
-    await setSessionRole(auth.sessionId, body.role);
-    res.json(await issueAuthSession(user, body.role));
+    user = await setActiveRole(user.id, body.role);
+    res.json(await currentUser(user));
   }),
 );
 
@@ -268,114 +149,48 @@ router.post(
 router.post(
   "/auth/practitioner/start",
   handler(async (req, res) => {
+    const auth = requireAuth(req.auth);
     const body = StartPractitionerSignupBody.parse(req.body);
-    const email = normaliseEmail(body.email);
     assertTimezone(body.timezone);
 
-    const existing = await findUserByEmail(email);
-
-    if (existing) {
-      const passwordMatches = await verifyPassword(
-        body.password,
-        existing.passwordHash,
-      );
-      if (!passwordMatches) {
-        throw conflict(
-          "An account already exists with this email. Sign in instead.",
-          "email_taken",
-        );
-      }
-
-      const progress = await loadSignupProgress(existing.id);
-      if (existing.isPractitioner && progress?.completedAt) {
-        throw conflict(
-          "Your practice is already set up. Sign in instead.",
-          "email_taken",
-        );
-      }
-
-      // Resuming an interrupted signup: reissue the code, keep the draft.
-      const devCode = existing.emailVerified
-        ? null
-        : await deliverVerificationCode(email);
-
-      res.status(201).json(toSignupState(existing, progress, devCode));
-      return;
+    const progress = await loadSignupProgress(auth.user.id);
+    if (auth.user.isPractitioner && progress?.completedAt) {
+      throw conflict("Your practice is already set up.", "already_practitioner");
     }
 
     const [user] = await db
-      .insert(usersTable)
-      .values({
-        email,
-        passwordHash: await hashPassword(body.password),
-        fullName: body.fullName.trim(),
+      .update(usersTable)
+      .set({
+        fullName: body.fullName?.trim() || auth.user.fullName,
         country: body.country,
         phone: body.phone,
         timezone: body.timezone,
         isPractitioner: true,
+        activeRole: "practitioner",
       })
+      .where(eq(usersTable.id, auth.user.id))
       .returning();
 
     if (!user) throw badRequest("We could not start that signup.");
 
-    await db.insert(practitionerProfilesTable).values({
-      userId: user.id,
-      timezone: body.timezone,
-      currency: DEFAULT_CURRENCY,
-    });
+    await db
+      .insert(practitionerProfilesTable)
+      .values({
+        userId: user.id,
+        timezone: body.timezone,
+        currency: DEFAULT_CURRENCY,
+      })
+      .onConflictDoNothing();
 
-    const [progress] = await db
+    const [nextProgress] = await db
       .insert(practitionerSignupProgressTable)
-      .values({ userId: user.id, currentStep: "verify_email", draft: {} })
+      .values({ userId: user.id, currentStep: "modality", draft: {} })
+      .onConflictDoNothing()
       .returning();
 
-    const devCode = await deliverVerificationCode(email);
-    res.status(201).json(toSignupState(user, progress ?? null, devCode));
-  }),
-);
-
-router.post(
-  "/auth/practitioner/verify",
-  handler(async (req, res) => {
-    const body = VerifyPractitionerEmailBody.parse(req.body);
-    const email = normaliseEmail(body.email);
-
-    const user = await findUserByEmail(email);
-    if (!user) throw notFound("We could not find a signup for that email.");
-
-    await consumeOtp(email, body.code);
-
-    const [verified] = await db
-      .update(usersTable)
-      .set({ emailVerified: true })
-      .where(eq(usersTable.id, user.id))
-      .returning();
-
-    const progress = await loadSignupProgress(user.id);
-    if (progress && progress.currentStep === "verify_email") {
-      await db
-        .update(practitionerSignupProgressTable)
-        .set({ currentStep: "modality" })
-        .where(eq(practitionerSignupProgressTable.userId, user.id));
-    }
-
-    res.json(await issueAuthSession(verified ?? user, "practitioner"));
-  }),
-);
-
-router.post(
-  "/auth/practitioner/resend",
-  handler(async (req, res) => {
-    const body = ResendPractitionerOtpBody.parse(req.body);
-    const email = normaliseEmail(body.email);
-
-    const user = await findUserByEmail(email);
-    // Do not reveal whether the address exists.
-    if (user && !user.emailVerified) {
-      await deliverVerificationCode(email);
-    }
-
-    res.status(204).end();
+    res
+      .status(201)
+      .json(toSignupState(user, nextProgress ?? progress ?? null));
   }),
 );
 

@@ -27,16 +27,8 @@ export function paymentWebReturnBaseUrl(
     );
   }
 
-  const expoDevelopmentDomain = env["REPLIT_EXPO_DEV_DOMAIN"]?.trim();
-  if (env["NODE_ENV"] !== "production" && expoDevelopmentDomain) {
-    return normalizedHttpsBaseUrl(
-      expoDevelopmentDomain,
-      "REPLIT_EXPO_DEV_DOMAIN",
-    );
-  }
-
   throw new Error(
-    "PAYMENT_WEB_RETURN_BASE_URL is required for web Checkout in production.",
+    "PAYMENT_WEB_RETURN_BASE_URL is required for web Checkout.",
   );
 }
 

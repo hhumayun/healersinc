@@ -11,7 +11,6 @@ export type SignupStep = typeof SignupStep[keyof typeof SignupStep];
 
 export const SignupStep = {
   account: 'account',
-  verify_email: 'verify_email',
   modality: 'modality',
   headline: 'headline',
   bio: 'bio',

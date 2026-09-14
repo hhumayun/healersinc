@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { db } from "./index";
 
 /**
@@ -13,9 +14,15 @@ import { db } from "./index";
  * Safe to run repeatedly; `drizzle-kit push` does not drop it.
  */
 export async function applyDatabaseConstraints(): Promise<void> {
-  await db.execute(sql`CREATE EXTENSION IF NOT EXISTS btree_gist`);
+  await applyDatabaseConstraintsWith(db);
+}
 
-  await db.execute(sql`
+export async function applyDatabaseConstraintsWith(
+  database: Pick<NodePgDatabase, "execute">,
+): Promise<void> {
+  await database.execute(sql`CREATE EXTENSION IF NOT EXISTS btree_gist`);
+
+  await database.execute(sql`
     DO $$
     BEGIN
       IF NOT EXISTS (

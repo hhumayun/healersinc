@@ -1,7 +1,6 @@
 import {
   boolean,
   index,
-  integer,
   jsonb,
   pgTable,
   text,
@@ -12,16 +11,19 @@ import {
 import { signupStepEnum } from "./enums";
 
 /**
- * One account per email address. A single account may hold both roles: every
- * practitioner may also browse and book as a client, which is why the roles are
- * independent booleans rather than a single role column.
+ * One account per person, identified by their Clerk user. Sign-in, passwords,
+ * email verification and sessions all live in Clerk; this row holds what the
+ * marketplace needs on top of that. A single account may hold both roles:
+ * every practitioner may also browse and book as a client, which is why the
+ * roles are independent booleans rather than a single role column.
  */
 export const usersTable = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** Clerk's `user_...` identifier; the bridge between the JWT and this row. */
+    clerkUserId: text("clerk_user_id").notNull(),
     email: text("email").notNull(),
-    passwordHash: text("password_hash").notNull(),
     fullName: text("full_name").notNull(),
     phone: text("phone"),
     country: text("country"),
@@ -30,7 +32,12 @@ export const usersTable = pgTable(
     avatarUrl: text("avatar_url"),
     isClient: boolean("is_client").notNull().default(false),
     isPractitioner: boolean("is_practitioner").notNull().default(false),
-    emailVerified: boolean("email_verified").notNull().default(false),
+    /**
+     * Which portal the account is currently acting in. Authorization is always
+     * derived from this column on the server, never from anything the client
+     * sends in a body or query string.
+     */
+    activeRole: text("active_role").notNull().default("client"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -39,56 +46,14 @@ export const usersTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => [uniqueIndex("users_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("users_clerk_user_id_unique").on(table.clerkUserId),
+    uniqueIndex("users_email_unique").on(table.email),
+  ],
 );
 
 export type User = typeof usersTable.$inferSelect;
 export type InsertUser = typeof usersTable.$inferInsert;
-
-/** Opaque bearer tokens handed to the mobile client. */
-export const sessionsTable = pgTable(
-  "sessions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
-    tokenHash: text("token_hash").notNull(),
-    /** Which portal the session was opened from; drives role-scoped routing. */
-    activeRole: text("active_role").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("sessions_token_hash_unique").on(table.tokenHash),
-    index("sessions_user_idx").on(table.userId),
-  ],
-);
-
-export type Session = typeof sessionsTable.$inferSelect;
-export type InsertSession = typeof sessionsTable.$inferInsert;
-
-/** Short-lived email verification codes for practitioner signup. */
-export const emailOtpsTable = pgTable(
-  "email_otps",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    email: text("email").notNull(),
-    codeHash: text("code_hash").notNull(),
-    attempts: integer("attempts").notNull().default(0),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    consumedAt: timestamp("consumed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [index("email_otps_email_idx").on(table.email)],
-);
-
-export type EmailOtp = typeof emailOtpsTable.$inferSelect;
-export type InsertEmailOtp = typeof emailOtpsTable.$inferInsert;
 
 /**
  * Persisted wizard state so an interrupted practitioner signup resumes exactly

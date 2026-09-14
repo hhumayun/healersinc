@@ -16,6 +16,17 @@ import { Text } from '@workspace/healers-inc/native';
  */
 export function errorMessage(err: unknown, fallback = 'Something went wrong.'): string {
   if (err && typeof err === 'object') {
+    // Clerk API errors carry an `errors` array with a user-facing longMessage.
+    const errors = (err as { errors?: unknown }).errors;
+    if (Array.isArray(errors) && errors.length > 0) {
+      const first = errors[0] as { longMessage?: unknown; message?: unknown };
+      if (typeof first.longMessage === 'string' && first.longMessage.trim()) {
+        return first.longMessage.trim();
+      }
+      if (typeof first.message === 'string' && first.message.trim()) {
+        return first.message.trim();
+      }
+    }
     const data = (err as { data?: unknown }).data;
     if (data && typeof data === 'object') {
       const message = (data as { message?: unknown }).message;

@@ -23,7 +23,6 @@ import type {
   AppConfig,
   Appointment,
   AppointmentActionRequest,
-  AuthSession,
   AvailabilityCalendar,
   AvailabilityException,
   AvailabilityExceptionDraft,
@@ -39,7 +38,6 @@ import type {
   ClientRegistration,
   Conversation,
   ConversationRequest,
-  Credentials,
   CurrentUser,
   DashboardSummary,
   GetPractitionerAvailabilityParams,
@@ -51,8 +49,6 @@ import type {
   MessageDraft,
   Notification,
   NotificationReadRequest,
-  OtpResendRequest,
-  OtpVerification,
   PaymentAccountLink,
   PaymentCheckoutInput,
   PaymentRefundInput,
@@ -257,220 +253,6 @@ export function useGetAppConfig<TData = Awaited<ReturnType<typeof getAppConfig>>
 
 
 
-export const getRegisterClientUrl = () => {
-
-
-
-
-  return `/api/auth/register`
-}
-
-/**
- * @summary Create a client account
- */
-export const registerClient = async (clientRegistration: ClientRegistration, options?: Parameters<typeof customFetch>[1]): Promise<AuthSession> => {
-
-  return customFetch<AuthSession>(getRegisterClientUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(clientRegistration)
-  }
-);}
-
-
-
-
-
-export const getRegisterClientMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerClient>>, TError,{data: BodyType<ClientRegistration>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof registerClient>>, TError,{data: BodyType<ClientRegistration>}, TContext> => {
-
-const mutationKey = ['registerClient'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerClient>>, {data: BodyType<ClientRegistration>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  registerClient(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type RegisterClientMutationResult = NonNullable<Awaited<ReturnType<typeof registerClient>>>
-    export type RegisterClientMutationBody = BodyType<ClientRegistration>
-    export type RegisterClientMutationError = ErrorType<unknown>
-
-    /**
- * @summary Create a client account
- */
-export const useRegisterClient = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerClient>>, TError,{data: BodyType<ClientRegistration>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof registerClient>>,
-        TError,
-        {data: BodyType<ClientRegistration>},
-        TContext
-      > => {
-      return useMutation(getRegisterClientMutationOptions(options));
-    }
-
-export const getLoginUrl = () => {
-
-
-
-
-  return `/api/auth/login`
-}
-
-/**
- * `role` selects which side of the marketplace the session opens in. An account holding both roles can sign in to either.
- * @summary Sign in to a specific portal
- */
-export const login = async (credentials: Credentials, options?: Parameters<typeof customFetch>[1]): Promise<AuthSession> => {
-
-  return customFetch<AuthSession>(getLoginUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(credentials)
-  }
-);}
-
-
-
-
-
-export const getLoginMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<Credentials>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<Credentials>}, TContext> => {
-
-const mutationKey = ['login'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, {data: BodyType<Credentials>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  login(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
-    export type LoginMutationBody = BodyType<Credentials>
-    export type LoginMutationError = ErrorType<unknown>
-
-    /**
- * @summary Sign in to a specific portal
- */
-export const useLogin = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof login>>, TError,{data: BodyType<Credentials>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof login>>,
-        TError,
-        {data: BodyType<Credentials>},
-        TContext
-      > => {
-      return useMutation(getLoginMutationOptions(options));
-    }
-
-export const getLogoutUrl = () => {
-
-
-
-
-  return `/api/auth/logout`
-}
-
-/**
- * @summary Invalidate the current session
- */
-export const logout = async ( options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getLogoutUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getLogoutMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext> => {
-
-const mutationKey = ['logout'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
-
-
-          return  logout(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
-
-    export type LogoutMutationError = ErrorType<unknown>
-
-    /**
- * @summary Invalidate the current session
- */
-export const useLogout = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof logout>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getLogoutMutationOptions(options));
-    }
-
 export const getGetCurrentUserUrl = () => {
 
 
@@ -480,6 +262,7 @@ export const getGetCurrentUserUrl = () => {
 }
 
 /**
+ * Identity is handled by Clerk. Send the Clerk session token as a bearer token; the first call provisions the marketplace account.
  * @summary The signed-in account
  */
 export const getCurrentUser = async ( options?: Parameters<typeof customFetch>[1]): Promise<CurrentUser> => {
@@ -548,6 +331,77 @@ export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUs
 
 
 
+export const getRegisterClientUrl = () => {
+
+
+
+
+  return `/api/auth/register`
+}
+
+/**
+ * @summary Complete client onboarding for the signed-in Clerk account
+ */
+export const registerClient = async (clientRegistration: ClientRegistration, options?: Parameters<typeof customFetch>[1]): Promise<CurrentUser> => {
+
+  return customFetch<CurrentUser>(getRegisterClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(clientRegistration)
+  }
+);}
+
+
+
+
+
+export const getRegisterClientMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerClient>>, TError,{data: BodyType<ClientRegistration>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerClient>>, TError,{data: BodyType<ClientRegistration>}, TContext> => {
+
+const mutationKey = ['registerClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerClient>>, {data: BodyType<ClientRegistration>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerClient(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterClientMutationResult = NonNullable<Awaited<ReturnType<typeof registerClient>>>
+    export type RegisterClientMutationBody = BodyType<ClientRegistration>
+    export type RegisterClientMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Complete client onboarding for the signed-in Clerk account
+ */
+export const useRegisterClient = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerClient>>, TError,{data: BodyType<ClientRegistration>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerClient>>,
+        TError,
+        {data: BodyType<ClientRegistration>},
+        TContext
+      > => {
+      return useMutation(getRegisterClientMutationOptions(options));
+    }
+
 export const getSwitchRoleUrl = () => {
 
 
@@ -557,11 +411,11 @@ export const getSwitchRoleUrl = () => {
 }
 
 /**
- * @summary Move the current session between the client and practitioner portals
+ * @summary Move the account between the client and practitioner portals
  */
-export const switchRole = async (roleSelection: RoleSelection, options?: Parameters<typeof customFetch>[1]): Promise<AuthSession> => {
+export const switchRole = async (roleSelection: RoleSelection, options?: Parameters<typeof customFetch>[1]): Promise<CurrentUser> => {
 
-  return customFetch<AuthSession>(getSwitchRoleUrl(),
+  return customFetch<CurrentUser>(getSwitchRoleUrl(),
   {
     ...options,
     method: 'POST',
@@ -606,7 +460,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type SwitchRoleMutationError = ErrorType<unknown>
 
     /**
- * @summary Move the current session between the client and practitioner portals
+ * @summary Move the account between the client and practitioner portals
  */
 export const useSwitchRole = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof switchRole>>, TError,{data: BodyType<RoleSelection>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -628,7 +482,7 @@ export const getStartPractitionerSignupUrl = () => {
 }
 
 /**
- * @summary Begin practitioner signup and send an email verification code
+ * @summary Begin practitioner onboarding for the signed-in Clerk account
  */
 export const startPractitionerSignup = async (practitionerSignupStart: PractitionerSignupStart, options?: Parameters<typeof customFetch>[1]): Promise<PractitionerSignupState> => {
 
@@ -677,7 +531,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type StartPractitionerSignupMutationError = ErrorType<unknown>
 
     /**
- * @summary Begin practitioner signup and send an email verification code
+ * @summary Begin practitioner onboarding for the signed-in Clerk account
  */
 export const useStartPractitionerSignup = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startPractitionerSignup>>, TError,{data: BodyType<PractitionerSignupStart>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -688,148 +542,6 @@ export const useStartPractitionerSignup = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getStartPractitionerSignupMutationOptions(options));
-    }
-
-export const getVerifyPractitionerEmailUrl = () => {
-
-
-
-
-  return `/api/auth/practitioner/verify`
-}
-
-/**
- * @summary Confirm the emailed verification code
- */
-export const verifyPractitionerEmail = async (otpVerification: OtpVerification, options?: Parameters<typeof customFetch>[1]): Promise<AuthSession> => {
-
-  return customFetch<AuthSession>(getVerifyPractitionerEmailUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(otpVerification)
-  }
-);}
-
-
-
-
-
-export const getVerifyPractitionerEmailMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPractitionerEmail>>, TError,{data: BodyType<OtpVerification>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof verifyPractitionerEmail>>, TError,{data: BodyType<OtpVerification>}, TContext> => {
-
-const mutationKey = ['verifyPractitionerEmail'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyPractitionerEmail>>, {data: BodyType<OtpVerification>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  verifyPractitionerEmail(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type VerifyPractitionerEmailMutationResult = NonNullable<Awaited<ReturnType<typeof verifyPractitionerEmail>>>
-    export type VerifyPractitionerEmailMutationBody = BodyType<OtpVerification>
-    export type VerifyPractitionerEmailMutationError = ErrorType<unknown>
-
-    /**
- * @summary Confirm the emailed verification code
- */
-export const useVerifyPractitionerEmail = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyPractitionerEmail>>, TError,{data: BodyType<OtpVerification>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof verifyPractitionerEmail>>,
-        TError,
-        {data: BodyType<OtpVerification>},
-        TContext
-      > => {
-      return useMutation(getVerifyPractitionerEmailMutationOptions(options));
-    }
-
-export const getResendPractitionerOtpUrl = () => {
-
-
-
-
-  return `/api/auth/practitioner/resend`
-}
-
-/**
- * @summary Send a fresh verification code
- */
-export const resendPractitionerOtp = async (otpResendRequest: OtpResendRequest, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
-
-  return customFetch<void>(getResendPractitionerOtpUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(otpResendRequest)
-  }
-);}
-
-
-
-
-
-export const getResendPractitionerOtpMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendPractitionerOtp>>, TError,{data: BodyType<OtpResendRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof resendPractitionerOtp>>, TError,{data: BodyType<OtpResendRequest>}, TContext> => {
-
-const mutationKey = ['resendPractitionerOtp'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resendPractitionerOtp>>, {data: BodyType<OtpResendRequest>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  resendPractitionerOtp(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ResendPractitionerOtpMutationResult = NonNullable<Awaited<ReturnType<typeof resendPractitionerOtp>>>
-    export type ResendPractitionerOtpMutationBody = BodyType<OtpResendRequest>
-    export type ResendPractitionerOtpMutationError = ErrorType<unknown>
-
-    /**
- * @summary Send a fresh verification code
- */
-export const useResendPractitionerOtp = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resendPractitionerOtp>>, TError,{data: BodyType<OtpResendRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof resendPractitionerOtp>>,
-        TError,
-        {data: BodyType<OtpResendRequest>},
-        TContext
-      > => {
-      return useMutation(getResendPractitionerOtpMutationOptions(options));
     }
 
 export const getGetPractitionerSignupProgressUrl = () => {

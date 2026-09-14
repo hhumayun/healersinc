@@ -23,6 +23,11 @@ export default function IndexRoute() {
     return <Redirect href="/(auth)/welcome" />;
   }
 
+  // Signed in with Clerk but never picked a side of the marketplace.
+  if (!user.isClient && !user.isPractitioner) {
+    return <Redirect href="/(auth)/sign-up" />;
+  }
+
   if (user.activeRole === 'practitioner' && !user.onboardingComplete) {
     return <Redirect href="/(auth)/practitioner-signup" />;
   }

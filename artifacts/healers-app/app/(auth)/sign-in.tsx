@@ -2,78 +2,60 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Redirect, useRouter } from 'expo-router';
-import { useLogin, type Credentials, type PortalRole } from '@workspace/api-client-react';
-import {
-  radii,
-  space,
-  useTheme,
-  withAlpha,
-} from '@workspace/healers-inc/lib/native-theme';
-import {
-  Button,
-  Field,
-  Input,
-  Segmented,
-  Text,
-} from '@workspace/healers-inc/native';
+import { useSignIn } from '@clerk/clerk-expo';
+import { space, useTheme } from '@workspace/healers-inc/lib/native-theme';
+import { Button, Field, Input, Text } from '@workspace/healers-inc/native';
 
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Screen } from '@/components/Screen';
 import { useSession } from '@/lib/session';
 import { BrandMark, ErrorBanner, errorMessage } from '@/components/AuthShared';
 
-const PORTAL_OPTIONS = [
-  { value: 'client' as PortalRole, label: 'Client' },
-  { value: 'practitioner' as PortalRole, label: 'Practitioner' },
-];
-
-// Seeded demo accounts (see artifacts/api-server/src/seed.ts). Shared password.
-const DEMO_PASSWORD = 'Healers2026!';
-const DEMO = {
-  client: { email: 'priya@healers.test', role: 'client' as PortalRole },
-  practitioner: { email: 'amara@healers.test', role: 'practitioner' as PortalRole },
-};
-
+/**
+ * Sign-in is handled by Clerk. Once the session is active the app loads the
+ * marketplace profile and routes to whichever portal the account last used.
+ */
 export default function SignInScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { status, user, signIn } = useSession();
+  const { status, user } = useSession();
+  const { isLoaded, signIn, setActive } = useSignIn();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<PortalRole>('client');
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const login = useLogin();
-
-  if (status === 'authenticated' && (user?.onboardingComplete ?? false)) {
+  if (status === 'authenticated' && user && (user.isClient || user.isPractitioner)) {
     return <Redirect href="/" />;
   }
 
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !login.isPending;
+  const canSubmit =
+    isLoaded && email.trim().length > 0 && password.length > 0 && !pending;
 
   async function handleSignIn() {
+    if (!isLoaded) return;
     setFormError(null);
-    const credentials: Credentials = {
-      email: email.trim(),
-      password,
-      role,
-    };
+    setPending(true);
     try {
-      const session = await login.mutateAsync({ data: credentials });
-      await signIn(session);
+      const attempt = await signIn.create({
+        identifier: email.trim(),
+        password,
+      });
+      if (attempt.status !== 'complete' || !attempt.createdSessionId) {
+        setFormError(
+          'Your account needs another verification step. Finish signing in on the web, then try again.',
+        );
+        return;
+      }
+      await setActive({ session: attempt.createdSessionId });
       router.replace('/');
     } catch (err) {
       setFormError(errorMessage(err, 'We could not sign you in. Check your details and try again.'));
+    } finally {
+      setPending(false);
     }
-  }
-
-  function fillDemo(kind: 'client' | 'practitioner') {
-    setEmail(DEMO[kind].email);
-    setPassword(DEMO_PASSWORD);
-    setRole(DEMO[kind].role);
-    setFormError(null);
   }
 
   return (
@@ -98,14 +80,6 @@ export default function SignInScreen() {
         </View>
 
         <View style={{ gap: space(4) }}>
-          <Field label="Open which portal?">
-            <Segmented
-              options={PORTAL_OPTIONS}
-              value={role}
-              onChange={setRole}
-            />
-          </Field>
-
           <Field label="Email">
             <Input
               value={email}
@@ -152,13 +126,11 @@ export default function SignInScreen() {
             title="Sign in"
             size="lg"
             fullWidth
-            loading={login.isPending}
+            loading={pending}
             disabled={!canSubmit}
             onPress={handleSignIn}
           />
         </View>
-
-        <DemoCredentials onFill={fillDemo} />
 
         <View
           style={{
@@ -180,55 +152,5 @@ export default function SignInScreen() {
         </View>
       </KeyboardAwareScrollViewCompat>
     </Screen>
-  );
-}
-
-function DemoCredentials({
-  onFill,
-}: {
-  onFill: (kind: 'client' | 'practitioner') => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <View
-      style={{
-        gap: space(3),
-        padding: space(4),
-        borderRadius: radii.lg,
-        borderWidth: 1,
-        borderStyle: 'dashed',
-        borderColor: colors.border,
-        backgroundColor: withAlpha(colors.muted, 0.5),
-      }}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space(2) }}>
-        <Feather name="key" size={14} color={colors.mutedForeground} />
-        <Text variant="overline" tone="muted">
-          Demo credentials
-        </Text>
-      </View>
-      <Text variant="caption" tone="muted">
-        This is a seeded demo. Tap to fill a sample account — shared password
-        Healers2026!
-      </Text>
-      <View style={{ flexDirection: 'row', gap: space(2) }}>
-        <Button
-          title="Use client demo"
-          variant="outline"
-          size="sm"
-          style={{ flex: 1 }}
-          icon={<Feather name="user" size={14} color={colors.foreground} />}
-          onPress={() => onFill('client')}
-        />
-        <Button
-          title="Use practitioner demo"
-          variant="outline"
-          size="sm"
-          style={{ flex: 1 }}
-          icon={<Feather name="briefcase" size={14} color={colors.foreground} />}
-          onPress={() => onFill('practitioner')}
-        />
-      </View>
-    </View>
   );
 }

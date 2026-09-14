@@ -51,6 +51,7 @@ import {
   unpaidPaymentSummary,
 } from "../lib/payments";
 import { countryIsEligible, paymentPolicy } from "../lib/paymentPolicy";
+import { publicApiBaseUrl } from "../lib/publicUrl";
 import {
   checkoutReturnUrls,
   paymentWebReturnBaseUrl,
@@ -590,12 +591,10 @@ router.post(
     if (!countryIsEligible(account.country) || !accountReady(account)) {
       throw conflict("This practitioner is not ready to accept payments.");
     }
-    const domain = process.env["REPLIT_DOMAINS"]?.split(",")[0]?.trim();
-    if (!domain) throw new Error("REPLIT_DOMAINS is required for checkout.");
     const returnUrls = checkoutReturnUrls({
       appointmentId: appointment.id,
       returnTarget: body.returnTarget,
-      apiBaseUrl: `https://${domain}`,
+      apiBaseUrl: publicApiBaseUrl(),
       webBaseUrl:
         body.returnTarget === "web" ? paymentWebReturnBaseUrl() : undefined,
     });

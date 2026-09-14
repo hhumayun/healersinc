@@ -1,26 +1,44 @@
 import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 
 /**
- * The API server runs as a separate artifact on the same Replit domain, so every
- * generated request (which uses relative `/api/...` paths) needs an absolute base.
+ * The API server is a separate deployment, so every generated request (which
+ * uses relative `/api/...` paths) needs an absolute base. Set
+ * `EXPO_PUBLIC_API_URL` (e.g. `https://api.example.com`); the legacy
+ * `EXPO_PUBLIC_DOMAIN` (host only) is still honoured.
  */
+const configuredUrl = process.env.EXPO_PUBLIC_API_URL;
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
-export const API_BASE_URL = domain ? `https://${domain}` : '';
+export const API_BASE_URL = configuredUrl
+  ? configuredUrl.replace(/\/+$/, '')
+  : domain
+    ? `https://${domain}`
+    : '';
 
 setBaseUrl(API_BASE_URL || null);
 
-let sessionToken: string | null = null;
+export type SessionTokenGetter = () => Promise<string | null>;
 
-/** Kept in a module variable so the generated fetch layer can read it lazily. */
-export function setSessionToken(token: string | null): void {
-  sessionToken = token;
+let tokenGetter: SessionTokenGetter | null = null;
+
+/**
+ * Clerk mints short-lived session JWTs and refreshes them itself, so instead
+ * of caching a token here the session provider registers Clerk's `getToken`
+ * and the fetch layer asks for a fresh one on every request.
+ */
+export function setSessionTokenGetter(getter: SessionTokenGetter | null): void {
+  tokenGetter = getter;
 }
 
-export function getSessionToken(): string | null {
-  return sessionToken;
+export async function getSessionToken(): Promise<string | null> {
+  if (!tokenGetter) return null;
+  try {
+    return await tokenGetter();
+  } catch {
+    return null;
+  }
 }
 
-setAuthTokenGetter(() => sessionToken);
+setAuthTokenGetter(getSessionToken);
 
 /** Turns an API-relative media path (`/api/media/...`) into a loadable URL. */
 export function mediaUrl(path?: string | null): string | undefined {

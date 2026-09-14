@@ -2,19 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Redirect, useRouter } from 'expo-router';
+import { useSignUp } from '@clerk/clerk-expo';
 import {
   getGetPractitionerSignupProgressQueryKey,
   useGetPractitionerSignupProgress,
-  useResendPractitionerOtp,
   useStartPractitionerSignup,
   useUpdatePractitionerSignupProgress,
-  useVerifyPractitionerEmail,
   Modality,
   SignupStep,
-  type AuthSession,
   type Modality as ModalityType,
   type PractitionerSignupDraft,
-  type PractitionerSignupStart,
   type PractitionerSignupState,
   type SignupStep as SignupStepType,
 } from '@workspace/api-client-react';
@@ -35,24 +32,33 @@ import {
 
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { Screen } from '@/components/Screen';
-import { useSession } from '@/lib/session';
+import { deviceTimezone, useSession } from '@/lib/session';
 import { BrandMark, ErrorBanner, InfoBanner, errorMessage } from '@/components/AuthShared';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * The wizard has two halves. `account`, `verify` and `contact` are handled on
+ * the device with Clerk (create the login, confirm the email, then tell the
+ * API who the practitioner is); everything from `modality` onwards is saved
+ * server-side so an interrupted application resumes where it stopped.
+ */
+type WizardStep = 'account' | 'verify' | 'contact' | SignupStepType;
+
 // Steps shown in the progress bar, in order. `complete` is terminal.
-const STEP_ORDER: SignupStepType[] = [
-  SignupStep.account,
-  SignupStep.verify_email,
+const STEP_ORDER: WizardStep[] = [
+  'account',
+  'verify',
   SignupStep.modality,
   SignupStep.headline,
   SignupStep.bio,
   SignupStep.details,
 ];
 
-const STEP_TITLES: Record<SignupStepType, string> = {
+const STEP_TITLES: Record<WizardStep, string> = {
   account: 'Create your account',
-  verify_email: 'Verify your email',
+  verify: 'Verify your email',
+  contact: 'How can we reach you?',
   modality: 'Your primary modality',
   headline: 'Your headline',
   bio: 'Tell clients about you',
@@ -60,9 +66,10 @@ const STEP_TITLES: Record<SignupStepType, string> = {
   complete: 'All set',
 };
 
-const STEP_SUBTITLES: Record<SignupStepType, string> = {
+const STEP_SUBTITLES: Record<WizardStep, string> = {
   account: 'Start your practitioner application.',
-  verify_email: 'We sent a 6-digit code to confirm your email.',
+  verify: 'We sent a 6-digit code to confirm your email.',
+  contact: 'Your country and phone number stay private to Healers Inc.',
   modality: 'Where does your work primarily sit?',
   headline: 'A short line that captures what you do.',
   bio: 'A few sentences help clients decide.',
@@ -84,21 +91,13 @@ const MODALITY_META: Record<
   },
 };
 
-function deviceTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-}
-
 export default function PractitionerSignupScreen() {
-  const { status, token, user, signIn } = useSession();
+  const { status, isSignedIn, user, refreshUser } = useSession();
 
   // Only fetch server progress once we have a session (mid-onboarding resume).
   const progressQuery = useGetPractitionerSignupProgress({
     query: {
-      enabled: !!token,
+      enabled: isSignedIn,
       retry: false,
       queryKey: getGetPractitionerSignupProgressQueryKey(),
     },
@@ -109,8 +108,8 @@ export default function PractitionerSignupScreen() {
     return <Redirect href="/" />;
   }
 
-  // While a token exists, wait for server progress before deciding the step.
-  if (token && progressQuery.isLoading) {
+  // While signed in, wait for server progress before deciding the step.
+  if (isSignedIn && progressQuery.isLoading) {
     return (
       <Screen>
         <View style={{ flex: 1, justifyContent: 'center' }}>
@@ -122,30 +121,37 @@ export default function PractitionerSignupScreen() {
 
   return (
     <Wizard
-      key={progressQuery.data?.email ?? 'new'}
-      serverState={token ? progressQuery.data ?? null : null}
-      onCompleted={signIn}
+      key={isSignedIn ? (progressQuery.data?.email ?? 'signed-in') : 'new'}
+      signedIn={isSignedIn}
+      serverState={isSignedIn ? (progressQuery.data ?? null) : null}
+      onSessionReady={() => refreshUser()}
     />
   );
 }
 
+function initialStep(signedIn: boolean, serverState: PractitionerSignupState | null): WizardStep {
+  if (!signedIn) return 'account';
+  if (!serverState || serverState.currentStep === SignupStep.account) return 'contact';
+  return serverState.currentStep;
+}
+
 function Wizard({
+  signedIn,
   serverState,
-  onCompleted,
+  onSessionReady,
 }: {
+  signedIn: boolean;
   serverState: PractitionerSignupState | null;
-  onCompleted: (session: AuthSession) => Promise<void>;
+  onSessionReady: () => Promise<unknown>;
 }) {
   const { colors } = useTheme();
   const router = useRouter();
   const session = useSession();
+  const { isLoaded: clerkLoaded, signUp, setActive } = useSignUp();
 
-  // The visible step is driven by the server whenever we have it.
-  const [step, setStep] = useState<SignupStepType>(
-    serverState?.currentStep ?? SignupStep.account,
-  );
-  const [devCode, setDevCode] = useState<string | null>(serverState?.devCode ?? null);
+  const [step, setStep] = useState<WizardStep>(() => initialStep(signedIn, serverState));
   const [formError, setFormError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
   // Account fields.
   const [fullName, setFullName] = useState('');
@@ -170,18 +176,13 @@ function Wizard({
   const [location, setLocation] = useState(draft.location ?? '');
 
   const startSignup = useStartPractitionerSignup();
-  const verifyEmail = useVerifyPractitionerEmail();
-  const resendOtp = useResendPractitionerOtp();
   const updateProgress = useUpdatePractitionerSignupProgress();
 
-  const busy =
-    startSignup.isPending ||
-    verifyEmail.isPending ||
-    resendOtp.isPending ||
-    updateProgress.isPending;
+  const busy = pending || startSignup.isPending || updateProgress.isPending;
 
   const progressIndex = useMemo(() => {
     if (step === SignupStep.complete) return STEP_ORDER.length;
+    if (step === 'contact') return 1;
     return STEP_ORDER.indexOf(step);
   }, [step]);
 
@@ -191,60 +192,102 @@ function Wizard({
     if (idx > 0) {
       // Never step back into a completed account/verify stage.
       const prev = STEP_ORDER[idx - 1];
-      if (prev === SignupStep.account || prev === SignupStep.verify_email) return;
+      if (prev === 'account' || prev === 'verify') return;
       setStep(prev);
     }
   }
 
-  const canGoBack =
-    STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(SignupStep.modality);
+  const canGoBack = STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(SignupStep.modality);
 
-  async function handleStart() {
+  function validateContact(): string | null {
+    if (country.trim().length < 2) return 'Enter your country.';
+    if (phone.trim().length < 4) return 'Enter a contact phone number.';
+    return null;
+  }
+
+  /** Tells the API this account is a practitioner and opens the wizard. */
+  async function startApplication() {
+    const state = await startSignup.mutateAsync({
+      data: {
+        fullName: fullName.trim().length >= 2 ? fullName.trim() : null,
+        country: country.trim(),
+        phone: phone.trim(),
+        timezone,
+      },
+    });
+    await onSessionReady();
+    setStep(state.currentStep === SignupStep.account ? SignupStep.modality : state.currentStep);
+  }
+
+  async function handleAccount() {
     setFormError(null);
+    if (!clerkLoaded) return;
     if (fullName.trim().length < 2) return setFormError('Enter your full name.');
     if (!EMAIL_RE.test(email.trim())) return setFormError('Enter a valid email.');
     if (password.length < 8) return setFormError('Use a password with at least 8 characters.');
-    if (country.trim().length < 2) return setFormError('Enter your country.');
-    if (phone.trim().length < 4) return setFormError('Enter a contact phone number.');
+    const contactError = validateContact();
+    if (contactError) return setFormError(contactError);
 
-    const body: PractitionerSignupStart = {
-      fullName: fullName.trim(),
-      email: email.trim(),
-      password,
-      country: country.trim(),
-      phone: phone.trim(),
-      timezone,
-    };
+    setPending(true);
     try {
-      const state = await startSignup.mutateAsync({ data: body });
-      setDevCode(state.devCode ?? null);
-      setStep(state.currentStep);
+      const [firstName, ...rest] = fullName.trim().split(/\s+/);
+      await signUp.create({
+        emailAddress: email.trim(),
+        password,
+        firstName,
+        lastName: rest.join(' ') || undefined,
+      });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      setStep('verify');
     } catch (err) {
       setFormError(errorMessage(err, 'We could not start your application.'));
+    } finally {
+      setPending(false);
     }
   }
 
   async function handleVerify() {
     setFormError(null);
+    if (!clerkLoaded) return;
     if (code.trim().length !== 6) return setFormError('Enter the 6-digit code.');
+    setPending(true);
     try {
-      const session = await verifyEmail.mutateAsync({
-        data: { email: email.trim(), code: code.trim() },
-      });
-      // Signing in gives us a token so progress can be saved/resumed.
-      await onCompleted(session);
-      setStep(SignupStep.modality);
+      const attempt = await signUp.attemptEmailAddressVerification({ code: code.trim() });
+      if (attempt.status !== 'complete' || !attempt.createdSessionId) {
+        setFormError('That code did not match. Try again.');
+        return;
+      }
+      // Activating the session gives the API a token so progress can be saved.
+      await setActive({ session: attempt.createdSessionId });
+      await startApplication();
     } catch (err) {
       setFormError(errorMessage(err, 'That code did not match. Try again.'));
+    } finally {
+      setPending(false);
     }
   }
 
   async function handleResend() {
     setFormError(null);
+    if (!clerkLoaded) return;
     try {
-      await resendOtp.mutateAsync({ data: { email: email.trim() } });
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
     } catch (err) {
       setFormError(errorMessage(err, 'We could not resend the code.'));
+    }
+  }
+
+  async function handleContact() {
+    setFormError(null);
+    const contactError = validateContact();
+    if (contactError) return setFormError(contactError);
+    setPending(true);
+    try {
+      await startApplication();
+    } catch (err) {
+      setFormError(errorMessage(err, 'We could not start your application.'));
+    } finally {
+      setPending(false);
     }
   }
 
@@ -312,6 +355,27 @@ function Wizard({
     }
   }
 
+  const primaryAction: { title: string; onPress: () => void } = (() => {
+    switch (step) {
+      case 'account':
+        return { title: 'Send verification code', onPress: () => void handleAccount() };
+      case 'verify':
+        return { title: 'Verify email', onPress: () => void handleVerify() };
+      case 'contact':
+        return { title: 'Continue', onPress: () => void handleContact() };
+      case SignupStep.modality:
+        return { title: 'Continue', onPress: () => void handleModality() };
+      case SignupStep.headline:
+        return { title: 'Continue', onPress: () => void handleHeadline() };
+      case SignupStep.bio:
+        return { title: 'Continue', onPress: () => void handleBio() };
+      case SignupStep.details:
+        return { title: 'Finish & open my practice', onPress: () => void handleDetails() };
+      default:
+        return { title: 'Continue', onPress: () => {} };
+    }
+  })();
+
   return (
     <Screen>
       <KeyboardAwareScrollViewCompat
@@ -350,7 +414,7 @@ function Wizard({
         </View>
 
         <View style={{ gap: space(4) }}>
-          {step === SignupStep.account ? (
+          {step === 'account' ? (
             <AccountStep
               fullName={fullName}
               setFullName={setFullName}
@@ -358,23 +422,20 @@ function Wizard({
               setEmail={setEmail}
               password={password}
               setPassword={setPassword}
+            />
+          ) : null}
+
+          {step === 'account' || step === 'contact' ? (
+            <ContactFields
               phone={phone}
               setPhone={setPhone}
               country={country}
               setCountry={setCountry}
-              timezone={timezone}
             />
           ) : null}
 
-          {step === SignupStep.verify_email ? (
-            <VerifyStep
-              email={email}
-              code={code}
-              setCode={setCode}
-              devCode={devCode}
-              onResend={handleResend}
-              resending={resendOtp.isPending}
-            />
+          {step === 'verify' ? (
+            <VerifyStep email={email} code={code} setCode={setCode} onResend={handleResend} />
           ) : null}
 
           {step === SignupStep.modality ? (
@@ -417,21 +478,21 @@ function Wizard({
 
           {formError ? <ErrorBanner message={formError} /> : null}
 
-          <StepActions
-            step={step}
-            busy={busy}
-            canGoBack={canGoBack}
-            onBack={goBack}
-            onStart={handleStart}
-            onVerify={handleVerify}
-            onModality={handleModality}
-            onHeadline={handleHeadline}
-            onBio={handleBio}
-            onDetails={handleDetails}
-          />
+          <View style={{ gap: space(3) }}>
+            <Button
+              title={primaryAction.title}
+              size="lg"
+              fullWidth
+              loading={busy}
+              onPress={primaryAction.onPress}
+            />
+            {canGoBack ? (
+              <Button title="Back" variant="ghost" size="default" fullWidth onPress={goBack} />
+            ) : null}
+          </View>
         </View>
 
-        {step === SignupStep.account ? (
+        {step === 'account' ? (
           <View
             style={{
               flexDirection: 'row',
@@ -456,25 +517,6 @@ function Wizard({
   );
 }
 
-function ProgressBar({ index, total }: { index: number; total: number }) {
-  const { colors } = useTheme();
-  return (
-    <View style={{ flexDirection: 'row', gap: space(1.5) }}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            flex: 1,
-            height: 4,
-            borderRadius: radii.pill,
-            backgroundColor: i <= index ? colors.primary : withAlpha(colors.primary, 0.16),
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
 function AccountStep(props: {
   fullName: string;
   setFullName: (v: string) => void;
@@ -482,11 +524,6 @@ function AccountStep(props: {
   setEmail: (v: string) => void;
   password: string;
   setPassword: (v: string) => void;
-  phone: string;
-  setPhone: (v: string) => void;
-  country: string;
-  setCountry: (v: string) => void;
-  timezone: string;
 }) {
   const { colors } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
@@ -534,26 +571,36 @@ function AccountStep(props: {
           }
         />
       </Field>
-      <View style={{ flexDirection: 'row', gap: space(3) }}>
-        <Field label="Country" style={{ flex: 1 }}>
-          <Input
-            value={props.country}
-            onChangeText={props.setCountry}
-            placeholder="Canada"
-            autoCapitalize="words"
-          />
-        </Field>
-        <Field label="Phone" style={{ flex: 1 }}>
-          <Input
-            value={props.phone}
-            onChangeText={props.setPhone}
-            placeholder="+1 555 0100"
-            keyboardType="phone-pad"
-            textContentType="telephoneNumber"
-          />
-        </Field>
-      </View>
     </>
+  );
+}
+
+function ContactFields(props: {
+  phone: string;
+  setPhone: (v: string) => void;
+  country: string;
+  setCountry: (v: string) => void;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', gap: space(3) }}>
+      <Field label="Country" style={{ flex: 1 }}>
+        <Input
+          value={props.country}
+          onChangeText={props.setCountry}
+          placeholder="Canada"
+          autoCapitalize="words"
+        />
+      </Field>
+      <Field label="Phone" style={{ flex: 1 }}>
+        <Input
+          value={props.phone}
+          onChangeText={props.setPhone}
+          placeholder="+1 555 0100"
+          keyboardType="phone-pad"
+          textContentType="telephoneNumber"
+        />
+      </Field>
+    </View>
   );
 }
 
@@ -561,38 +608,21 @@ function VerifyStep({
   email,
   code,
   setCode,
-  devCode,
   onResend,
-  resending,
 }: {
   email: string;
   code: string;
   setCode: (v: string) => void;
-  devCode: string | null;
   onResend: () => void;
-  resending: boolean;
 }) {
   const { colors } = useTheme();
   return (
     <>
       <InfoBanner icon="mail" tint={colors.primary}>
         <Text variant="small">
-          Enter the code we sent to{' '}
-          <Text variant="bodyStrong">{email}</Text>.
+          Enter the code we sent to <Text variant="bodyStrong">{email}</Text>.
         </Text>
       </InfoBanner>
-
-      {devCode ? (
-        <InfoBanner icon="alert-triangle" tint={colors.chart4}>
-          <Text variant="label" style={{ color: colors.chart4 }}>
-            Development code: {devCode}
-          </Text>
-          <Text variant="caption" tone="muted">
-            Shown only because email delivery is not connected yet. Once an email
-            provider is configured, this code arrives in your inbox instead.
-          </Text>
-        </InfoBanner>
-      ) : null}
 
       <Field label="Verification code">
         <Input
@@ -611,15 +641,28 @@ function VerifyStep({
         <Text variant="small" tone="muted">
           Didn't get it?
         </Text>
-        <Button
-          title="Resend code"
-          variant="link"
-          size="sm"
-          loading={resending}
-          onPress={onResend}
-        />
+        <Button title="Resend code" variant="link" size="sm" onPress={onResend} />
       </View>
     </>
+  );
+}
+
+function ProgressBar({ index, total }: { index: number; total: number }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', gap: space(1.5) }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            flex: 1,
+            height: 4,
+            borderRadius: radii.pill,
+            backgroundColor: i <= index ? colors.primary : withAlpha(colors.primary, 0.16),
+          }}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -720,60 +763,3 @@ function DetailsStep(props: {
   );
 }
 
-function StepActions({
-  step,
-  busy,
-  canGoBack,
-  onBack,
-  onStart,
-  onVerify,
-  onModality,
-  onHeadline,
-  onBio,
-  onDetails,
-}: {
-  step: SignupStepType;
-  busy: boolean;
-  canGoBack: boolean;
-  onBack: () => void;
-  onStart: () => void;
-  onVerify: () => void;
-  onModality: () => void;
-  onHeadline: () => void;
-  onBio: () => void;
-  onDetails: () => void;
-}) {
-  const primary: { title: string; onPress: () => void } = (() => {
-    switch (step) {
-      case SignupStep.account:
-        return { title: 'Send verification code', onPress: onStart };
-      case SignupStep.verify_email:
-        return { title: 'Verify email', onPress: onVerify };
-      case SignupStep.modality:
-        return { title: 'Continue', onPress: onModality };
-      case SignupStep.headline:
-        return { title: 'Continue', onPress: onHeadline };
-      case SignupStep.bio:
-        return { title: 'Continue', onPress: onBio };
-      case SignupStep.details:
-        return { title: 'Finish & open my practice', onPress: onDetails };
-      default:
-        return { title: 'Continue', onPress: () => {} };
-    }
-  })();
-
-  return (
-    <View style={{ gap: space(3) }}>
-      <Button
-        title={primary.title}
-        size="lg"
-        fullWidth
-        loading={busy}
-        onPress={primary.onPress}
-      />
-      {canGoBack ? (
-        <Button title="Back" variant="ghost" size="default" fullWidth onPress={onBack} />
-      ) : null}
-    </View>
-  );
-}
