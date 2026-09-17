@@ -13,7 +13,8 @@ const router: IRouter = Router();
  * pre-provision; `user.updated` refreshes email/name/avatar and
  * `user.deleted` cascades the local account away.
  */
-router.post("/webhooks/clerk", async (req, res): Promise<void> => {
+// Mounted at /api/webhooks/clerk in app.ts, with a raw body parser.
+router.post("/", async (req, res): Promise<void> => {
   if (!clerkWebhookSigningSecret) {
     res.status(404).json({ error: "not_found", message: "Webhook not configured." });
     return;

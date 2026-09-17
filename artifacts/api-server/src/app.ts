@@ -55,7 +55,14 @@ app.post(
     }
   },
 );
-app.use("/api", express.raw({ type: "application/json" }), clerkWebhookRouter);
+// Signature verification needs the exact bytes Clerk sent, so the raw parser
+// is scoped to this one path. Mounting it any wider would swallow the JSON
+// body of every other POST before `express.json()` sees it.
+app.use(
+  "/api/webhooks/clerk",
+  express.raw({ type: "application/json" }),
+  clerkWebhookRouter,
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
