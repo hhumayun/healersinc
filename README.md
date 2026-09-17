@@ -36,8 +36,8 @@ Neon (Postgres), Railway (servers) and Clerk (auth).
 - `lib/db/src/schema` — Drizzle schema, the source of truth for the database.
 - `lib/api-spec/openapi.yaml` — API contract; generated client in `lib/api-client-react`, Zod in `lib/api-zod`.
 - `lib/scheduling` — timezone-aware slot generation.
-- `Dockerfile`, `railway.json` — API service deployment.
-- `artifacts/healers-app/railway.json`, `server/serve-web.js` — Expo web deployment.
+- `.railway/railway.ts` — Railway infrastructure as code: both services, their build/deploy settings and non-secret variables.
+- `Dockerfile` — API service image. `artifacts/healers-app/Dockerfile`, `server/serve-web.js` — Expo web image.
 
 ## Deployment
 
@@ -65,17 +65,30 @@ sessions and email verification live in Clerk.
 
 ### Railway
 
-Two services from this repository:
+Both services are declared in `.railway/railway.ts` (Railway's
+infrastructure-as-code) and build from this repository with the root as the
+build context; `RAILWAY_DOCKERFILE_PATH` picks the Dockerfile per service.
 
-1. **API** — root directory `/`, builds from `Dockerfile` via `railway.json`.
-   The pre-deploy command runs migrations. Set `PUBLIC_API_URL` to the service's
-   public HTTPS origin (Stripe webhooks and Checkout return URLs are built from
-   it). Keep it at **one replica**: realtime sockets and the reminder/refund
-   schedulers are in-process.
-2. **App (web)** — root directory `artifacts/healers-app`, uses its own
-   `railway.json`: exports the Expo web build and serves it with
-   `server/serve-web.js`. Set `EXPO_PUBLIC_API_URL` and
-   `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` as build-time variables.
+1. `railway login`, then `railway init --name healers-inc` (or `railway link`
+   to an existing project).
+2. Set the secrets once, on the `api` service (they are `preserve()`d in code,
+   never committed): `DATABASE_URL`, `DIRECT_DATABASE_URL`, `CLERK_SECRET_KEY`,
+   `CLERK_PUBLISHABLE_KEY`, and later `CLERK_WEBHOOK_SIGNING_SECRET`.
+   `echo "<value>" | railway variable set KEY --stdin --service api --skip-deploys`
+3. `railway config plan`, then `railway config apply`.
+4. `railway domain --service api --port 8080` and
+   `railway domain --service app --port 3000` create the public domains.
+   `PUBLIC_API_URL` and `EXPO_PUBLIC_API_URL` derive from the API's domain via
+   Railway variable references, so nothing else needs editing.
+
+Services:
+
+1. **api** — root `Dockerfile`. The pre-deploy command runs migrations and the
+   health check is `/api/healthz`. Keep it at **one replica**: realtime
+   sockets and the reminder/refund schedulers are in-process.
+2. **app** — `artifacts/healers-app/Dockerfile` exports the Expo web build
+   with `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` as build
+   args and serves it with `server/serve-web.js`.
 
 Native builds (iOS/Android) use EAS or `expo run:*` with the same
 `EXPO_PUBLIC_*` variables.
