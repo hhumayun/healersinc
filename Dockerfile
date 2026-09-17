@@ -21,8 +21,7 @@ COPY artifacts/mockup-sandbox/package.json ./artifacts/mockup-sandbox/
 COPY lib ./lib
 COPY scripts ./scripts
 COPY artifacts/api-server ./artifacts/api-server
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile \
+RUN pnpm install --frozen-lockfile \
       --filter @workspace/api-server... \
       --filter @workspace/db \
       --filter ./scripts

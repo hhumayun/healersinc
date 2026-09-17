@@ -30,8 +30,7 @@ COPY scripts/package.json ./scripts/
 COPY lib ./lib
 COPY artifacts/healers-inc ./artifacts/healers-inc
 COPY artifacts/healers-app ./artifacts/healers-app
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @workspace/healers-app...
+RUN pnpm install --frozen-lockfile --filter @workspace/healers-app...
 RUN test -n "$EXPO_PUBLIC_API_URL" || (echo "EXPO_PUBLIC_API_URL is required at build time" && exit 1)
 RUN test -n "$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" || (echo "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is required at build time" && exit 1)
 RUN pnpm --filter @workspace/healers-app run build:web
