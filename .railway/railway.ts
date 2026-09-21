@@ -6,7 +6,7 @@ import { defineRailway, github, preserve, project, service } from "railway/iac";
  * `railway config apply`. Secrets are `preserve()`d so they are managed in
  * Railway, never in source.
  */
-const repo = "hhumayun/SquigglyCautiousCalculator";
+const repo = "hhumayun/healersinc";
 const branch = "claude/jolly-heisenberg-jjxcqh";
 
 export default defineRailway(() => {
