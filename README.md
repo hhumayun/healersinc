@@ -35,9 +35,12 @@ Neon (Postgres), Railway (servers) and Clerk (auth).
 - `artifacts/api-server` — Express API. Entry `src/index.ts`, routes in `src/routes`.
 - `artifacts/healers-app` — Expo Router mobile app (iOS, Android, web).
 - `artifacts/healers-inc-web` — the web site (Vite + wouter): marketing pages plus the
-  full client journey in the browser (sign in/up with Clerk, discover, book, bookings,
-  payments, messages, notifications, reviews, account). `src/lib/session.tsx` mirrors the
-  app's session layer; client-only routes are wrapped in `RequireClient`.
+  full client journey (sign in/up with Clerk, discover, book, bookings, payments,
+  messages, notifications, reviews, account) and the practitioner portal (application
+  wizard at `/practitioner-signup`, dashboard, schedule, `/manage/*` practice pages,
+  payouts). `src/lib/session.tsx` mirrors the app's session layer; routes are wrapped
+  in `RequireClient`, `RequirePractitioner` or `RequireMember` (`src/components/require-client.tsx`)
+  and the account menu switches portals for accounts holding both roles.
 - `artifacts/healers-inc`, `artifacts/mockup-sandbox` — design-system previews, dev only.
 - `lib/db/src/schema` — Drizzle schema, the source of truth for the database.
 - `lib/api-spec/openapi.yaml` — API contract; generated client in `lib/api-client-react`, Zod in `lib/api-zod`.
@@ -116,7 +119,11 @@ Native builds (iOS/Android) use EAS or `expo run:*` with the same
   `https://healers.example,https://www.healers.example`; `http://localhost:*` is
   also accepted outside production). Set that variable on the API service to
   the web site's public origin, or web Checkout from the site is refused with
-  a 400.
+  a 400. The same allowlist covers Stripe payout onboarding: the site sends its
+  origin as `returnBaseUrl` when requesting an onboarding link, the API tags the
+  hosted return/refresh URLs with it, and `/api/payments/onboarding/return`
+  redirects back to `<site>/manage/payments?onboarding=return|refresh` instead
+  of the app scheme.
 
 ## Gotchas
 

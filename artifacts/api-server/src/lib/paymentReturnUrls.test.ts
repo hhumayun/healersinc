@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   checkoutReturnUrls,
+  onboardingRedirectTarget,
+  onboardingReturnUrls,
   paymentWebReturnAllowedBaseUrls,
   paymentWebReturnBaseUrl,
   resolveWebReturnBaseUrl,
@@ -166,5 +168,49 @@ test("web Checkout returns to a localhost dev site outside production", () => {
       cancelUrl:
         "http://localhost:5173/checkout-return?appointmentId=appointment-id&status=cancelled",
     },
+  );
+});
+
+test("onboarding links return through the API handlers, carrying the web site when given", () => {
+  assert.deepEqual(onboardingReturnUrls({ apiBaseUrl: "https://api.example.com" }), {
+    returnUrl: "https://api.example.com/api/payments/onboarding/return",
+    refreshUrl: "https://api.example.com/api/payments/onboarding/refresh",
+  });
+  assert.deepEqual(
+    onboardingReturnUrls({
+      apiBaseUrl: "https://api.example.com",
+      webBaseUrl: "https://healers.example/",
+    }),
+    {
+      returnUrl:
+        "https://api.example.com/api/payments/onboarding/return?web=https%3A%2F%2Fhealers.example%2F",
+      refreshUrl:
+        "https://api.example.com/api/payments/onboarding/refresh?web=https%3A%2F%2Fhealers.example%2F",
+    },
+  );
+});
+
+test("the onboarding return handler goes back to an allowlisted web site, else the app", () => {
+  const env = {
+    NODE_ENV: "production",
+    PAYMENT_WEB_RETURN_ALLOWED_BASE_URLS: "https://healers.example",
+  };
+  assert.equal(
+    onboardingRedirectTarget("https://healers.example/", "return", env),
+    "https://healers.example/manage/payments?onboarding=return",
+  );
+  assert.equal(
+    onboardingRedirectTarget("https://healers.example/", "refresh", env),
+    "https://healers.example/manage/payments?onboarding=refresh",
+  );
+  assert.equal(onboardingRedirectTarget(undefined, "return", env), "healers-app://manage/payments");
+  assert.equal(onboardingRedirectTarget("", "return", env), "healers-app://manage/payments");
+  assert.equal(
+    onboardingRedirectTarget("https://evil.example/", "return", env),
+    "healers-app://manage/payments",
+  );
+  assert.equal(
+    onboardingRedirectTarget(["https://healers.example/"], "return", env),
+    "healers-app://manage/payments",
   );
 });

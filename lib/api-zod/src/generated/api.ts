@@ -903,9 +903,13 @@ export const ListPractitionerPaymentsResponse = zod.object({
 
 
 /**
- * The server supplies its configured refresh and return destinations; clients cannot override either URL.
+ * The server supplies its configured refresh and return destinations; clients cannot override either URL. A web site may ask to be returned to after onboarding by sending its own base URL, which must be one of the server's allowlisted web return origins.
  * @summary Create a hosted Stripe Connect onboarding link
  */
+export const CreatePractitionerPaymentOnboardingLinkBody = zod.object({
+  "returnBaseUrl": zod.url().optional().describe('Web only. Base URL of the site to return to after hosted onboarding; must be one of the server\'s allowlisted web return origins.')
+})
+
 export const CreatePractitionerPaymentOnboardingLinkResponse = zod.object({
   "status": zod.enum(['feature_disabled', 'policy_unavailable', 'onboarding_required', 'pending', 'restricted', 'ready']),
   "url": zod.url(),

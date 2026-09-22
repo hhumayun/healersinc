@@ -51,6 +51,7 @@ import type {
   NotificationReadRequest,
   PaymentAccountLink,
   PaymentCheckoutInput,
+  PaymentOnboardingInput,
   PaymentRefundInput,
   PaymentSummary,
   PractitionerPayments,
@@ -2203,17 +2204,17 @@ export const getCreatePractitionerPaymentOnboardingLinkUrl = () => {
 }
 
 /**
- * The server supplies its configured refresh and return destinations; clients cannot override either URL.
+ * The server supplies its configured refresh and return destinations; clients cannot override either URL. A web site may ask to be returned to after onboarding by sending its own base URL, which must be one of the server's allowlisted web return origins.
  * @summary Create a hosted Stripe Connect onboarding link
  */
-export const createPractitionerPaymentOnboardingLink = async ( options?: Parameters<typeof customFetch>[1]): Promise<PaymentAccountLink> => {
+export const createPractitionerPaymentOnboardingLink = async (paymentOnboardingInput?: PaymentOnboardingInput, options?: Parameters<typeof customFetch>[1]): Promise<PaymentAccountLink> => {
 
   return customFetch<PaymentAccountLink>(getCreatePractitionerPaymentOnboardingLinkUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(paymentOnboardingInput)
   }
 );}
 
@@ -2222,8 +2223,8 @@ export const createPractitionerPaymentOnboardingLink = async ( options?: Paramet
 
 
 export const getCreatePractitionerPaymentOnboardingLinkMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,{data?: BodyType<PaymentOnboardingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,{data?: BodyType<PaymentOnboardingInput>}, TContext> => {
 
 const mutationKey = ['createPractitionerPaymentOnboardingLink'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2235,10 +2236,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, {data?: BodyType<PaymentOnboardingInput>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  createPractitionerPaymentOnboardingLink(requestOptions)
+          return  createPractitionerPaymentOnboardingLink(data,requestOptions)
         }
 
 
@@ -2249,18 +2250,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type CreatePractitionerPaymentOnboardingLinkMutationResult = NonNullable<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>>
-
+    export type CreatePractitionerPaymentOnboardingLinkMutationBody = BodyType<PaymentOnboardingInput> | undefined
     export type CreatePractitionerPaymentOnboardingLinkMutationError = ErrorType<unknown>
 
     /**
  * @summary Create a hosted Stripe Connect onboarding link
  */
 export const useCreatePractitionerPaymentOnboardingLink = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>, TError,{data?: BodyType<PaymentOnboardingInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createPractitionerPaymentOnboardingLink>>,
         TError,
-        void,
+        {data?: BodyType<PaymentOnboardingInput>},
         TContext
       > => {
       return useMutation(getCreatePractitionerPaymentOnboardingLinkMutationOptions(options));

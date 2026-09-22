@@ -8,6 +8,7 @@ import { logger } from "./lib/logger";
 import { errorHandler } from "./lib/errors";
 import { WebhookHandlers } from "./webhookHandlers";
 import { paymentPolicy } from "./lib/paymentPolicy";
+import { onboardingRedirectTarget } from "./lib/paymentReturnUrls";
 import clerkWebhookRouter from "./routes/clerkWebhook";
 
 const app: Express = express();
@@ -68,8 +69,10 @@ app.use(express.urlencoded({ extended: true }));
 
 app.get(
   ["/api/payments/onboarding/return", "/api/payments/onboarding/refresh"],
-  (_req, res) => {
-    res.redirect(303, "healers-app://manage/payments");
+  (req, res) => {
+    // Web sites pass their allowlisted base URL as `?web=`; the app gets its scheme.
+    const outcome = req.path.endsWith("/refresh") ? "refresh" : "return";
+    res.redirect(303, onboardingRedirectTarget(req.query["web"], outcome));
   },
 );
 app.get(

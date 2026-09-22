@@ -593,6 +593,11 @@ export interface PaymentAccountLink {
   expiresAt: string;
 }
 
+export interface PaymentOnboardingInput {
+  /** Web only. Base URL of the site to return to after hosted onboarding; must be one of the server's allowlisted web return origins. */
+  returnBaseUrl?: string;
+}
+
 export type PaymentCheckoutInputReturnTarget = typeof PaymentCheckoutInputReturnTarget[keyof typeof PaymentCheckoutInputReturnTarget];
 
 

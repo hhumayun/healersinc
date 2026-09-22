@@ -32,12 +32,17 @@ import {
   type DashboardSummary,
   type PractitionerProfile as PractitionerProfileDto,
   ListPractitionerPaymentsResponse,
+  CreatePractitionerPaymentOnboardingLinkBody,
   CreatePractitionerPaymentOnboardingLinkResponse,
 } from "@workspace/api-zod";
 import { isValidTimeZone, safeZone } from "@workspace/scheduling";
 import { requireRole } from "../lib/auth";
 import { badRequest, conflict, handler, notFound } from "../lib/errors";
 import { publicApiBaseUrl } from "../lib/publicUrl";
+import {
+  onboardingReturnUrls,
+  resolveWebReturnBaseUrl,
+} from "../lib/paymentReturnUrls";
 import { requireCalendarRange } from "../lib/query";
 import { toAppointment, toAvailabilityException, toService } from "../lib/serializers";
 import { getUncachableStripeClient } from "../stripeClient";
@@ -496,6 +501,15 @@ router.post(
       throw conflict("In-app payments are not available in your country yet.");
     }
     const apiBaseUrl = publicApiBaseUrl();
+    // Optional: a web site asking to be returned to after hosted onboarding.
+    // Must be allowlisted (400 otherwise); the app sends nothing and gets its scheme.
+    const onboardingBody = CreatePractitionerPaymentOnboardingLinkBody.parse(req.body ?? {});
+    const onboardingReturn = onboardingReturnUrls({
+      apiBaseUrl,
+      webBaseUrl: onboardingBody.returnBaseUrl
+        ? resolveWebReturnBaseUrl(onboardingBody.returnBaseUrl)
+        : undefined,
+    });
     const stripe = await getUncachableStripeClient();
     const countrySpec = await stripe.countrySpecs.retrieve(country);
     if (!countrySpec.supported_payment_methods.includes("card")) {
@@ -518,13 +532,12 @@ router.post(
       } else {
         account = await refreshStripePaymentAccount(auth.user.id, account, stripe);
       }
-      const baseUrl = apiBaseUrl;
       if (account.accountApiVersion === "v2") {
         const link = await stripe.v2.core.accountLinks.create(
           v2RecipientAccountLinkParams({
             accountId: account.stripeAccountId,
-            returnUrl: `${baseUrl}/api/payments/onboarding/return`,
-            refreshUrl: `${baseUrl}/api/payments/onboarding/refresh`,
+            returnUrl: onboardingReturn.returnUrl,
+            refreshUrl: onboardingReturn.refreshUrl,
           }),
         );
         linkUrl = link.url;
@@ -533,8 +546,8 @@ router.post(
         const link = await stripe.accountLinks.create({
           account: account.stripeAccountId,
           type: "account_onboarding",
-          return_url: `${baseUrl}/api/payments/onboarding/return`,
-          refresh_url: `${baseUrl}/api/payments/onboarding/refresh`,
+          return_url: onboardingReturn.returnUrl,
+          refresh_url: onboardingReturn.refreshUrl,
         });
         linkUrl = link.url;
         linkExpiresAt = new Date(link.expires_at * 1000);

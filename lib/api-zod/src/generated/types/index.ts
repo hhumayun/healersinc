@@ -51,6 +51,7 @@ export * from './paymentAccountLink';
 export * from './paymentAccountStatus';
 export * from './paymentCheckoutInput';
 export * from './paymentCheckoutInputReturnTarget';
+export * from './paymentOnboardingInput';
 export * from './paymentRefundInput';
 export * from './paymentSummary';
 export * from './portalRole';

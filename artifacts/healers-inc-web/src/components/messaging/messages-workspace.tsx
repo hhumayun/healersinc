@@ -6,6 +6,7 @@ import {
 import { cn } from '@workspace/healers-inc/lib/utils';
 
 import { Page } from '@/components/page';
+import { useSession } from '@/lib/session';
 import { ConversationList } from '@/components/messaging/conversation-list';
 import { ConversationThread } from '@/components/messaging/conversation-thread';
 
@@ -25,6 +26,7 @@ export function MessagesWorkspace({
   const conversationsQuery = useListConversations({
     query: { queryKey: getListConversationsQueryKey() },
   });
+  const isPractitioner = useSession().role === 'practitioner';
 
   return (
     <Page testId={testId} className="pb-6 sm:pb-8">
@@ -39,7 +41,9 @@ export function MessagesWorkspace({
         >
           <div className="px-4 pt-4 pb-3 border-b border-border">
             <h1 className="text-xl font-bold tracking-tight text-foreground">Messages</h1>
-            <p className="text-sm text-muted-foreground">Your conversations with practitioners</p>
+            <p className="text-sm text-muted-foreground">
+              {isPractitioner ? 'Your conversations with clients' : 'Your conversations with practitioners'}
+            </p>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-2">
             <ConversationList
@@ -69,8 +73,9 @@ export function MessagesWorkspace({
               </span>
               <p className="text-base font-medium text-foreground">Select a conversation</p>
               <p className="text-sm max-w-xs">
-                Pick a conversation on the left to read and reply, or start one from a
-                practitioner's profile.
+                {isPractitioner
+                  ? 'Pick a conversation on the left to read and reply. Clients start conversations from your profile or a booking.'
+                  : "Pick a conversation on the left to read and reply, or start one from a practitioner's profile."}
               </p>
             </div>
           )}

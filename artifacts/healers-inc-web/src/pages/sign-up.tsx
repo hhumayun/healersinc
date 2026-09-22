@@ -224,7 +224,11 @@ function SignUpForm({ next }: { next: string }) {
             {register.isPending ? 'Setting up…' : 'Start exploring'}
           </Button>
           <FieldDescription className="text-center">
-            Practitioners: apply to join from the Healers Inc app.
+            Practitioner?{' '}
+            <Link href="/practitioner-signup" className="font-medium text-primary hover:underline" data-testid="sign-up-to-practitioner">
+              Apply to join instead
+            </Link>
+            .
           </FieldDescription>
         </form>
       </AuthShell>

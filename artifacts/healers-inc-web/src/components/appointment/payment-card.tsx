@@ -23,11 +23,14 @@ export function PaymentCard({
   confirming,
   timedOut,
   onCheckAgain,
+  showNet = false,
 }: {
   payment: PaymentSummary;
   confirming: boolean;
   timedOut: boolean;
   onCheckAgain: () => void;
+  /** Practitioners also see what reaches them after the platform fee. */
+  showNet?: boolean;
 }) {
   const state = PAYMENT_STATES[payment.status];
   const title = confirming ? 'Confirming payment' : timedOut ? 'Still confirming' : state.title;
@@ -63,6 +66,14 @@ export function PaymentCard({
             label="Amount"
             value={formatMoney(payment.grossAmountCents, payment.currency)}
             testId="appointment-payment-amount"
+          />
+        ) : null}
+        {showAmount && showNet ? (
+          <InfoRow
+            icon={CreditCard}
+            label={`Your net (after ${(payment.platformFeeBasisPoints / 100).toFixed(payment.platformFeeBasisPoints % 100 ? 1 : 0)}% platform fee)`}
+            value={formatMoney(payment.practitionerNetCents, payment.currency)}
+            testId="appointment-payment-net"
           />
         ) : null}
         {timedOut ? (

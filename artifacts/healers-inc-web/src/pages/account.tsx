@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
-import { LogOut } from 'lucide-react';
+import { Award, ChevronRight, LogOut, Repeat } from 'lucide-react';
+import { Link } from 'wouter';
 import {
   getGetClientProfileQueryKey,
   useGetClientProfile,
@@ -31,13 +32,16 @@ import { zoneCity } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { ErrorBanner, ErrorState, LoadingBlock, Page, PageHeader } from '@/components/page';
 import { UserAvatar } from '@/components/user-avatar';
+import { PRACTICE_LINKS, RoleBadge } from '@/components/nav';
+import { usePortalSwitch } from '@/hooks/use-portal-switch';
 import { TimezoneSelect, isValidTimezone } from '@/components/account/timezone-select';
 
 /** `/account` — the client's own details, ported from the Expo account screen. */
 export default function AccountPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const { refreshUser, signOut } = useSession();
+  const { refreshUser, signOut, user } = useSession();
+  const portal = usePortalSwitch();
   const query = useGetClientProfile({
     query: { queryKey: getGetClientProfileQueryKey() },
   });
@@ -161,10 +165,90 @@ export default function AccountPage() {
                 {profile.email}
               </CardDescription>
               <CardDescription>
-                Your photo is managed in the Healers Inc app.
+                {user?.activeRole === 'practitioner'
+                  ? 'Your public photo is set on your practitioner profile.'
+                  : 'Your photo is managed in the Healers Inc app.'}
               </CardDescription>
             </div>
+            {user ? (
+              <div className="sm:ml-auto">
+                <RoleBadge role={user.activeRole} />
+              </div>
+            ) : null}
           </CardHeader>
+        </Card>
+
+        {user?.activeRole === 'practitioner' && user.onboardingComplete ? (
+          <Card data-testid="account-practice">
+            <CardHeader>
+              <CardTitle>Your practice</CardTitle>
+              <CardDescription>Everything clients see and book.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PRACTICE_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="flex items-center gap-3 rounded-lg border border-border p-3 text-sm font-medium text-foreground hover:bg-muted"
+                  data-testid={`account-link-${link.testId}`}
+                >
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <link.icon className="w-4 h-4" />
+                  </span>
+                  <span className="flex-1">{link.label}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <Card data-testid="account-portal">
+          <CardHeader>
+            <CardTitle>Portal</CardTitle>
+            <CardDescription>
+              {user?.isClient && user?.isPractitioner
+                ? 'You hold both a client and a practitioner account.'
+                : user?.isPractitioner
+                  ? 'Your account is set up as a practitioner.'
+                  : 'Offer sessions on Healers Inc.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {portal.error ? <ErrorBanner message={portal.error} /> : null}
+            {user?.isClient && user?.isPractitioner ? (
+              <Button
+                variant="outline"
+                className="sm:self-start"
+                onClick={() => void portal.switchTo(user.activeRole === 'practitioner' ? 'client' : 'practitioner')}
+                disabled={portal.isPending}
+                data-testid="account-switch-role"
+              >
+                <Repeat className="w-4 h-4" aria-hidden />
+                {portal.isPending
+                  ? 'Switching…'
+                  : user.activeRole === 'practitioner'
+                    ? 'Switch to client view'
+                    : 'Switch to practitioner view'}
+              </Button>
+            ) : user?.isPractitioner ? (
+              <p className="text-sm text-muted-foreground">
+                A client profile for booking sessions yourself can be created from the Healers Inc app.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Apply to become a practitioner and start accepting bookings from clients around the world.
+                </p>
+                <Button variant="secondary" className="sm:self-start" asChild data-testid="account-apply-practitioner">
+                  <Link href="/practitioner-signup">
+                    <Award className="w-4 h-4" aria-hidden />
+                    Apply as a practitioner
+                  </Link>
+                </Button>
+              </>
+            )}
+          </CardContent>
         </Card>
 
         <Card>

@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import {
   getListConversationsQueryKey,
   getListNotificationsQueryKey,
   useListConversations,
   useListNotifications,
+  type CurrentUser,
+  type PortalRole,
 } from '@workspace/api-client-react';
 import { cn } from '@workspace/healers-inc/lib/utils';
 import { Button } from '@workspace/healers-inc/components/ui/button';
@@ -18,29 +20,66 @@ import {
   DropdownMenuTrigger,
 } from '@workspace/healers-inc/components/ui/dropdown-menu';
 import {
+  Award,
   Bell,
   CalendarDays,
   ChevronDown,
+  Clock,
+  CreditCard,
+  LayoutDashboard,
+  LayoutGrid,
   LogOut,
   Menu,
   MessageCircle,
+  Repeat,
   Search,
+  SlidersHorizontal,
   UserRound,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import logoUrl from '@workspace/healers-inc/logo.svg';
-import { MobileCta } from '@/components/mobile-cta';
 import { UserAvatar } from '@/components/user-avatar';
+import { usePortalSwitch } from '@/hooks/use-portal-switch';
 import { useSession } from '@/lib/session';
 import { signInHref } from '@/components/require-client';
 
 const MARKETING_PATHS = new Set(['/', '/practitioners']);
 
-const CLIENT_LINKS = [
+type NavLink = { href: string; label: string; icon: LucideIcon; testId: string };
+
+const CLIENT_LINKS: NavLink[] = [
   { href: '/discover', label: 'Discover', icon: Search, testId: 'discover' },
   { href: '/bookings', label: 'Bookings', icon: CalendarDays, testId: 'bookings' },
   { href: '/messages', label: 'Messages', icon: MessageCircle, testId: 'messages' },
-] as const;
+];
+
+const PRACTITIONER_LINKS: NavLink[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, testId: 'dashboard' },
+  { href: '/schedule', label: 'Schedule', icon: CalendarDays, testId: 'schedule' },
+  { href: '/messages', label: 'Messages', icon: MessageCircle, testId: 'messages' },
+];
+
+/** A practitioner whose application is unfinished only has the wizard. */
+const APPLICANT_LINKS: NavLink[] = [
+  { href: '/practitioner-signup', label: 'Your application', icon: Award, testId: 'application' },
+];
+
+/** The practice-management pages, shown in the account menu for practitioners. */
+export const PRACTICE_LINKS: NavLink[] = [
+  { href: '/manage/profile', label: 'Public profile', icon: UserRound, testId: 'manage-profile' },
+  { href: '/manage/services', label: 'Services', icon: LayoutGrid, testId: 'manage-services' },
+  { href: '/manage/availability', label: 'Availability', icon: Clock, testId: 'manage-availability' },
+  { href: '/manage/policy', label: 'Booking rules', icon: SlidersHorizontal, testId: 'manage-policy' },
+  { href: '/manage/payments', label: 'Payments', icon: CreditCard, testId: 'manage-payments' },
+];
+
+function primaryLinks(user: CurrentUser): NavLink[] {
+  if (user.activeRole === 'practitioner') {
+    return user.onboardingComplete ? PRACTITIONER_LINKS : APPLICANT_LINKS;
+  }
+  return CLIENT_LINKS;
+}
 
 function isActive(location: string, href: string): boolean {
   return location === href || location.startsWith(`${href}/`);
@@ -67,11 +106,14 @@ export function Nav() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { status, user, signOut } = useSession();
+  const portal = usePortalSwitch();
 
   const signedIn = status === 'authenticated' && user !== null;
   const onboarded = signedIn && (user.isClient || user.isPractitioner);
   const isMarketing = MARKETING_PATHS.has(location);
   const isPractitionerPage = location === '/practitioners';
+  const isPractitioner = onboarded && user.activeRole === 'practitioner';
+  const holdsBothRoles = onboarded && user.isClient && user.isPractitioner;
 
   // Unread indicators are only fetched once signed in; realtime events
   // invalidate these queries so the counts stay current.
@@ -125,10 +167,9 @@ export function Nav() {
     </>
   );
 
-  const clientLinks = (mobile = false) =>
-    CLIENT_LINKS.map((link) => {
-      const unread =
-        link.href === '/messages' ? unreadMessages : 0;
+  const portalLinks = (mobile = false) =>
+    (onboarded ? primaryLinks(user) : []).map((link) => {
+      const unread = link.href === '/messages' ? unreadMessages : 0;
       return (
         <Link
           key={link.href}
@@ -142,6 +183,8 @@ export function Nav() {
         </Link>
       );
     });
+
+  const otherRole: PortalRole = isPractitioner ? 'client' : 'practitioner';
 
   return (
     <header
@@ -164,7 +207,7 @@ export function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-1" data-testid="desktop-nav">
-          {onboarded ? clientLinks() : marketingLinks()}
+          {onboarded ? portalLinks() : marketingLinks()}
         </nav>
 
         {/* Desktop account area */}
@@ -196,12 +239,9 @@ export function Nav() {
                 <Link href={signInHref(isMarketing ? undefined : location)}>Sign in</Link>
               </Button>
               {isPractitionerPage ? (
-                <MobileCta
-                  label="Start your practice"
-                  appPath="/practitioner-signup"
-                  size="sm"
-                  testId="nav-cta-practitioner"
-                />
+                <Button size="sm" asChild data-testid="nav-cta-practitioner">
+                  <Link href="/practitioner-signup">Start your practice</Link>
+                </Button>
               ) : (
                 <Button size="sm" asChild data-testid="nav-get-started">
                   <Link href="/sign-up">Get started</Link>
@@ -241,7 +281,7 @@ export function Nav() {
         data-testid="nav-mobile-menu"
         className={cn(
           'md:hidden overflow-hidden transition-all duration-300 bg-background border-b border-border',
-          menuOpen ? 'max-h-[80dvh] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0',
+          menuOpen ? 'max-h-[85dvh] opacity-100 overflow-y-auto' : 'max-h-0 opacity-0',
         )}
       >
         <div className="px-4 py-4 flex flex-col gap-2">
@@ -255,7 +295,7 @@ export function Nav() {
                 </div>
                 <RoleBadge role={user.activeRole} />
               </div>
-              {clientLinks(true)}
+              {portalLinks(true)}
               <Link
                 href="/notifications"
                 data-testid="nav-mobile-link-notifications"
@@ -273,7 +313,50 @@ export function Nav() {
                 <UserRound className="w-4 h-4" />
                 Account
               </Link>
+
+              {isPractitioner && user.onboardingComplete ? (
+                <div className="pt-2 border-t border-border flex flex-col gap-1">
+                  <p className="px-4 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Your practice
+                  </p>
+                  {PRACTICE_LINKS.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      data-testid={`nav-mobile-link-${link.testId}`}
+                      className={navLinkClass(isActive(location, link.href), true)}
+                    >
+                      <link.icon className="w-4 h-4" />
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+
               <div className="pt-2 border-t border-border flex flex-col gap-2">
+                {holdsBothRoles ? (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={() => void portal.switchTo(otherRole)}
+                    disabled={portal.isPending}
+                    data-testid="nav-mobile-switch-role"
+                  >
+                    <Repeat className="w-4 h-4" />
+                    {portal.isPending
+                      ? 'Switching…'
+                      : isPractitioner
+                        ? 'Switch to client view'
+                        : 'Switch to practitioner view'}
+                  </Button>
+                ) : !isPractitioner ? (
+                  <Button variant="outline" className="w-full gap-2" asChild data-testid="nav-mobile-apply">
+                    <Link href="/practitioner-signup">
+                      <Award className="w-4 h-4" />
+                      Apply as a practitioner
+                    </Link>
+                  </Button>
+                ) : null}
                 {marketingLinks(true)}
                 <Button
                   variant="outline"
@@ -293,19 +376,15 @@ export function Nav() {
                 <Button variant="outline" className="w-full" asChild data-testid="nav-mobile-sign-in">
                   <Link href={signInHref(isMarketing ? undefined : location)}>Sign in</Link>
                 </Button>
-                <Button className="w-full" asChild data-testid="nav-mobile-get-started">
-                  <Link href="/sign-up">Get started</Link>
-                </Button>
                 {isPractitionerPage ? (
-                  <MobileCta
-                    label="Start your practice"
-                    appPath="/practitioner-signup"
-                    variant="ghost"
-                    className="w-full"
-                    size="sm"
-                    testId="nav-mobile-cta-practitioner"
-                  />
-                ) : null}
+                  <Button className="w-full" asChild data-testid="nav-mobile-cta-practitioner">
+                    <Link href="/practitioner-signup">Start your practice</Link>
+                  </Button>
+                ) : (
+                  <Button className="w-full" asChild data-testid="nav-mobile-get-started">
+                    <Link href="/sign-up">Get started</Link>
+                  </Button>
+                )}
               </div>
             </>
           )}
@@ -315,7 +394,7 @@ export function Nav() {
   );
 }
 
-function RoleBadge({ role }: { role: 'client' | 'practitioner' }) {
+export function RoleBadge({ role }: { role: PortalRole }) {
   return (
     <Badge variant={role === 'client' ? 'secondary' : 'outline'} data-testid="nav-role-badge">
       {role === 'client' ? 'Client' : 'Practitioner'}
@@ -323,9 +402,34 @@ function RoleBadge({ role }: { role: 'client' | 'practitioner' }) {
   );
 }
 
+function MenuLink({
+  href,
+  icon: Icon,
+  children,
+  testId,
+}: {
+  href: string;
+  icon: LucideIcon;
+  children: ReactNode;
+  testId: string;
+}) {
+  return (
+    <DropdownMenuItem asChild>
+      <Link href={href} className="flex items-center gap-2 cursor-pointer" data-testid={testId}>
+        <Icon className="w-4 h-4" />
+        {children}
+      </Link>
+    </DropdownMenuItem>
+  );
+}
+
 function AccountMenu() {
   const { user, signOut } = useSession();
+  const portal = usePortalSwitch();
   if (!user) return null;
+
+  const isPractitioner = user.activeRole === 'practitioner';
+  const holdsBothRoles = user.isClient && user.isPractitioner;
 
   return (
     <DropdownMenu>
@@ -353,31 +457,66 @@ function AccountMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/account" className="flex items-center gap-2 cursor-pointer" data-testid="menu-account">
-            <UserRound className="w-4 h-4" />
-            Account
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/bookings" className="flex items-center gap-2 cursor-pointer" data-testid="menu-bookings">
-            <CalendarDays className="w-4 h-4" />
+        <MenuLink href="/account" icon={UserRound} testId="menu-account">
+          Account
+        </MenuLink>
+        {isPractitioner ? (
+          user.onboardingComplete ? (
+            <>
+              <MenuLink href="/dashboard" icon={LayoutDashboard} testId="menu-dashboard">
+                Dashboard
+              </MenuLink>
+              <MenuLink href="/schedule" icon={CalendarDays} testId="menu-schedule">
+                Schedule
+              </MenuLink>
+            </>
+          ) : (
+            <MenuLink href="/practitioner-signup" icon={Award} testId="menu-application">
+              Your application
+            </MenuLink>
+          )
+        ) : (
+          <MenuLink href="/bookings" icon={CalendarDays} testId="menu-bookings">
             Bookings
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/messages" className="flex items-center gap-2 cursor-pointer" data-testid="menu-messages">
-            <MessageCircle className="w-4 h-4" />
-            Messages
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/notifications" className="flex items-center gap-2 cursor-pointer" data-testid="menu-notifications">
-            <Bell className="w-4 h-4" />
-            Notifications
-          </Link>
-        </DropdownMenuItem>
+          </MenuLink>
+        )}
+        <MenuLink href="/messages" icon={MessageCircle} testId="menu-messages">
+          Messages
+        </MenuLink>
+        <MenuLink href="/notifications" icon={Bell} testId="menu-notifications">
+          Notifications
+        </MenuLink>
+
+        {isPractitioner && user.onboardingComplete ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
+              Your practice
+            </DropdownMenuLabel>
+            {PRACTICE_LINKS.map((link) => (
+              <MenuLink key={link.href} href={link.href} icon={link.icon} testId={`menu-${link.testId}`}>
+                {link.label}
+              </MenuLink>
+            ))}
+          </>
+        ) : null}
+
         <DropdownMenuSeparator />
+        {holdsBothRoles ? (
+          <DropdownMenuItem
+            onSelect={() => void portal.switchTo(isPractitioner ? 'client' : 'practitioner')}
+            disabled={portal.isPending}
+            className="flex items-center gap-2 cursor-pointer"
+            data-testid="menu-switch-role"
+          >
+            <Repeat className="w-4 h-4" />
+            {isPractitioner ? 'Switch to client view' : 'Switch to practitioner view'}
+          </DropdownMenuItem>
+        ) : !isPractitioner ? (
+          <MenuLink href="/practitioner-signup" icon={Award} testId="menu-apply">
+            Apply as a practitioner
+          </MenuLink>
+        ) : null}
         <DropdownMenuItem
           onSelect={() => void signOut()}
           className="flex items-center gap-2 cursor-pointer"

@@ -122,7 +122,7 @@ export default function PaymentsScreen() {
 
   const startOnboarding = () => {
     setOnboardingError(null);
-    onboarding.mutate(undefined, {
+    onboarding.mutate({}, {
       onSuccess: async (link) => {
         try {
           if (Platform.OS === 'web') {

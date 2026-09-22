@@ -181,3 +181,48 @@ export function checkoutReturnUrls(input: {
     cancelUrl: cancelUrl.toString(),
   };
 }
+
+/** Where the mobile app expects Stripe payout onboarding to land. */
+export const NATIVE_ONBOARDING_RETURN = "healers-app://manage/payments";
+
+/**
+ * Return/refresh destinations for hosted Stripe Connect onboarding. Both point
+ * at fixed API handlers; when the request came from an allowlisted web site,
+ * that site's base URL rides along as `?web=` so the handler can send the
+ * browser back to the site instead of the app scheme.
+ */
+export function onboardingReturnUrls(input: {
+  apiBaseUrl: string;
+  webBaseUrl?: string;
+}): { returnUrl: string; refreshUrl: string } {
+  const build = (outcome: "return" | "refresh") => {
+    const url = new URL(`${input.apiBaseUrl}/api/payments/onboarding/${outcome}`);
+    if (input.webBaseUrl) url.searchParams.set("web", input.webBaseUrl);
+    return url.toString();
+  };
+  return { returnUrl: build("return"), refreshUrl: build("refresh") };
+}
+
+/**
+ * Pick where the onboarding return handler should redirect. A `web` query
+ * value is honoured only if it is still an allowlisted web base URL (it was
+ * allowlisted when the link was created, but the allowlist may have changed
+ * since); anything else falls back to the app scheme.
+ */
+export function onboardingRedirectTarget(
+  webQuery: unknown,
+  outcome: "return" | "refresh",
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (typeof webQuery !== "string" || !webQuery.trim()) {
+    return NATIVE_ONBOARDING_RETURN;
+  }
+  try {
+    const base = resolveWebReturnBaseUrl(webQuery, env);
+    const url = new URL("manage/payments", base);
+    url.searchParams.set("onboarding", outcome);
+    return url.toString();
+  } catch {
+    return NATIVE_ONBOARDING_RETURN;
+  }
+}

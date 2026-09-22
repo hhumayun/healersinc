@@ -202,12 +202,9 @@ export default function Practitioners() {
             custom={3}
             className="flex flex-col sm:flex-row gap-4 items-center justify-center"
           >
-            <MobileCta
-              label="Apply to join"
-              appPath="/practitioner-signup"
-              size="lg"
-              testId="pract-hero-cta-primary"
-            />
+            <Button size="lg" asChild data-testid="pract-hero-cta-primary">
+              <Link href="/practitioner-signup">Apply to join</Link>
+            </Button>
             <Button
               variant="ghost"
               size="lg"
@@ -336,12 +333,18 @@ export default function Practitioners() {
               </div>
 
               <div className="mt-10">
-                <MobileCta
-                  label="Start your application"
-                  appPath="/practitioner-signup"
-                  size="lg"
-                  testId="join-cta"
-                />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <Button size="lg" asChild data-testid="join-cta">
+                    <Link href="/practitioner-signup">Start your application</Link>
+                  </Button>
+                  <MobileCta
+                    label="Prefer the app? Apply on mobile"
+                    appPath="/practitioner-signup"
+                    webPath="/practitioner-signup"
+                    variant="link"
+                    testId="join-cta-app"
+                  />
+                </div>
               </div>
             </motion.div>
 
@@ -483,13 +486,9 @@ export default function Practitioners() {
               intention — anywhere in the world.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-              <MobileCta
-                label="Apply now — it's free"
-                appPath="/practitioner-signup"
-                variant="secondary"
-                size="lg"
-                testId="pract-final-cta-primary"
-              />
+              <Button variant="secondary" size="lg" asChild data-testid="pract-final-cta-primary">
+                <Link href="/practitioner-signup">Apply now — it's free</Link>
+              </Button>
               <Link
                 href="/discover"
                 className={cn(

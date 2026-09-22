@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetAppointmentQueryKey,
+  getGetPractitionerCalendarQueryKey,
+  getGetPractitionerDashboardQueryKey,
   getListAppointmentsQueryKey,
   getListConversationsQueryKey,
   getListMessagesQueryKey,
@@ -92,6 +94,13 @@ export function useRealtime(): void {
             });
             void queryClient.invalidateQueries({
               queryKey: getGetAppointmentQueryKey(payload.appointmentId),
+            });
+            // Practitioner views of the same data.
+            void queryClient.invalidateQueries({
+              queryKey: getGetPractitionerCalendarQueryKey().slice(0, 1),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: getGetPractitionerDashboardQueryKey(),
             });
             break;
         }

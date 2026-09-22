@@ -561,9 +561,17 @@ paths:
       summary: Create a hosted Stripe Connect onboarding link
       description: >-
         The server supplies its configured refresh and return destinations;
-        clients cannot override either URL.
+        clients cannot override either URL. A web site may ask to be returned
+        to after onboarding by sending its own base URL, which must be one of
+        the server's allowlisted web return origins.
       security:
         - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentOnboardingInput"
       responses:
         "200":
           description: Hosted onboarding link
@@ -1925,6 +1933,14 @@ components:
         - status
         - url
         - expiresAt
+
+    PaymentOnboardingInput:
+      type: object
+      properties:
+        returnBaseUrl:
+          type: string
+          format: uri
+          description: Web only. Base URL of the site to return to after hosted onboarding; must be one of the server's allowlisted web return origins.
 
     PaymentCheckoutInput:
       type: object

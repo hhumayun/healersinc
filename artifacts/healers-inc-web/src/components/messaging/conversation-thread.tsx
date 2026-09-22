@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'wouter';
 import { ArrowLeft, Ban, Flag, MessageCircle, MoreVertical, ShieldCheck } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -67,6 +67,31 @@ function useMinuteTick(): number {
   return tick;
 }
 
+function PartyLink({
+  href,
+  className,
+  testId,
+  children,
+}: {
+  href: string | null;
+  className: string;
+  testId: string;
+  children: ReactNode;
+}) {
+  if (!href) {
+    return (
+      <div className={className} data-testid={testId}>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <Link href={href} className={className} data-testid={testId}>
+      {children}
+    </Link>
+  );
+}
+
 function ThreadHeader({
   conversation,
   onBlockToggle,
@@ -77,6 +102,7 @@ function ThreadHeader({
   onReport: () => void;
 }) {
   useMinuteTick();
+  const viewerIsClient = useCurrentUser()?.activeRole === 'client';
   const otherParty = conversation?.otherParty;
 
   return (
@@ -98,11 +124,11 @@ function ThreadHeader({
 
       {otherParty ? (
         <>
-          {/* In the client portal the other party is always a practitioner. */}
-          <Link
-            href={`/practitioner/${otherParty.id}`}
+          {/* Clients can open the practitioner's public page; a client has no public page. */}
+          <PartyLink
+            href={viewerIsClient ? `/practitioner/${otherParty.id}` : null}
             className="flex items-center gap-3 min-w-0 flex-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            data-testid="link-conversation-practitioner"
+            testId="link-conversation-practitioner"
           >
             <UserAvatar
               name={otherParty.fullName}
@@ -118,7 +144,7 @@ function ThreadHeader({
                 {zoneCity(otherParty.timezone)}
               </p>
             </div>
-          </Link>
+          </PartyLink>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -429,7 +455,11 @@ export function ConversationThread({ conversationId }: { conversationId: string 
           <EmptyState
             icon={MessageCircle}
             title={`Say hello to ${otherParty?.fullName?.split(' ')[0] ?? 'them'}`}
-            description="Send the first message to start planning your session."
+            description={
+              viewer?.activeRole === 'practitioner'
+                ? 'Send the first message to help this client plan their session.'
+                : 'Send the first message to start planning your session.'
+            }
           />
         </div>
       ) : (

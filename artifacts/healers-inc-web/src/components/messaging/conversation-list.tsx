@@ -7,6 +7,7 @@ import { Skeleton } from '@workspace/healers-inc/components/ui/skeleton';
 import { cn } from '@workspace/healers-inc/lib/utils';
 
 import { timeAgo } from '@/lib/format';
+import { useSession } from '@/lib/session';
 import { EmptyState, ErrorState } from '@/components/page';
 import { UserAvatar } from '@/components/user-avatar';
 
@@ -136,6 +137,7 @@ export function ConversationList({
   onRetry: () => void;
   activeId?: string | null;
 }) {
+  const isPractitioner = useSession().role === 'practitioner';
   if (isLoading) return <ConversationListSkeleton />;
 
   if (error !== null && error !== undefined && !conversations) {
@@ -148,11 +150,21 @@ export function ConversationList({
       <EmptyState
         icon={MessageCircle}
         title="No conversations yet"
-        description="Find a practitioner and start a conversation to plan your next session."
+        description={
+          isPractitioner
+            ? 'Clients who message you from your profile or a booking will appear here.'
+            : 'Find a practitioner and start a conversation to plan your next session.'
+        }
         action={
-          <Button asChild data-testid="button-explore-practitioners">
-            <Link href="/discover">Explore practitioners</Link>
-          </Button>
+          isPractitioner ? (
+            <Button asChild variant="outline" data-testid="button-open-dashboard">
+              <Link href="/dashboard">Back to dashboard</Link>
+            </Button>
+          ) : (
+            <Button asChild data-testid="button-explore-practitioners">
+              <Link href="/discover">Explore practitioners</Link>
+            </Button>
+          )
         }
       />
     );

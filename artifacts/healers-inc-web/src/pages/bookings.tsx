@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { Link, useLocation, useSearch } from 'wouter';
+import { Link, Redirect, useLocation, useSearch } from 'wouter';
 import { CalendarDays, Star } from 'lucide-react';
 import {
   getListAppointmentsQueryKey,
@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from '@workspace/healers-inc/components/u
 
 import { AppointmentCard } from '@/components/appointment-card';
 import { EmptyState, ErrorState, Page, PageHeader } from '@/components/page';
+import { useSession } from '@/lib/session';
 
 const SCOPES: { value: AppointmentScope; label: string }[] = [
   { value: 'upcoming', label: 'Upcoming' },
@@ -70,6 +71,7 @@ function BookingListSkeleton() {
  * and refreshes keep it.
  */
 export default function BookingsPage() {
+  const { role } = useSession();
   const search = useSearch();
   const [, navigate] = useLocation();
   const requested = new URLSearchParams(search).get('scope');
@@ -92,6 +94,9 @@ export default function BookingsPage() {
 
   const isLoading = query.isLoading;
   const isError = query.isError && !query.data;
+
+  // Practitioners see the same bookings as a calendar.
+  if (role === 'practitioner') return <Redirect to="/schedule" replace />;
 
   return (
     <Page testId="page-bookings">

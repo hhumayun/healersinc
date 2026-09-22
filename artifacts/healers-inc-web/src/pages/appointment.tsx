@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearch } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Bookmark,
   CalendarDays,
   CalendarPlus,
+  Check,
+  CheckSquare,
   Clock,
   Globe,
   MessageCircle,
@@ -17,10 +19,16 @@ import {
   getAppointmentCalendarFile,
   getGetAppointmentPaymentQueryKey,
   getGetAppointmentQueryKey,
+  getGetPractitionerCalendarQueryKey,
+  getGetPractitionerDashboardQueryKey,
   getListAppointmentsQueryKey,
+  getListConversationsQueryKey,
+  getListPractitionerPaymentsQueryKey,
   useActOnAppointment,
+  useCreateAppointmentRefund,
   useGetAppointment,
   useGetAppointmentPayment,
+  useListConversations,
   useOpenConversation,
   type AppointmentActionRequestAction,
 } from '@workspace/api-client-react';
@@ -60,9 +68,12 @@ import {
   clockInZone,
   formatDuration,
   formatMoney,
+  makeIdempotencyKey,
   sessionFormatLabel,
   zoneCity,
 } from '@/lib/format';
+
+type Confirmation = 'cancel' | 'decline' | 'refund';
 
 const CANCEL_COPY = {
   confirmed:
@@ -84,9 +95,9 @@ function downloadCalendarFile(file: { filename: string; contentType: string; con
 }
 
 /**
- * `/appointment/:id` — one session from the client's side, ported from the
- * Expo screen minus the practitioner-only actions (accept/decline/complete/
- * refund), which live in the app.
+ * `/appointment/:id` — one session from whichever side is looking at it,
+ * ported from the Expo screen. Clients can pay, reschedule, cancel and review;
+ * practitioners can accept/decline, complete, reschedule, cancel and refund.
  */
 export default function AppointmentPage() {
   const { id = '' } = useParams<{ id: string }>();
@@ -99,6 +110,7 @@ export default function AppointmentPage() {
     query: { enabled: !!appointmentId, queryKey: getGetAppointmentQueryKey(appointmentId) },
   });
   const appointment = query.data;
+  const isPractitioner = appointment?.viewerRole === 'practitioner';
 
   const paymentQuery = useGetAppointmentPayment(appointmentId, {
     query: {
@@ -110,18 +122,35 @@ export default function AppointmentPage() {
 
   const checkout = useCheckoutPopup({ appointmentId, paymentStatus: payment?.status });
   const act = useActOnAppointment();
+  const refund = useCreateAppointmentRefund();
   const openConversation = useOpenConversation();
 
+  // Practitioners cannot start conversations (clients do), so look up the
+  // existing thread with this client instead.
+  const conversationsQuery = useListConversations({
+    query: { queryKey: getListConversationsQueryKey(), enabled: isPractitioner },
+  });
+  const existingConversation = useMemo(
+    () =>
+      appointment && isPractitioner
+        ? conversationsQuery.data?.find((c) => c.otherParty.id === appointment.client.id)
+        : undefined,
+    [appointment, conversationsQuery.data, isPractitioner],
+  );
+
   const [rescheduling, setRescheduling] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  const [confirming, setConfirming] = useState<Confirmation | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<AppointmentActionRequestAction | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
 
   useEffect(() => {
-    document.title = appointment
-      ? `${appointment.serviceName} with ${appointment.practitioner.fullName} · Healers Inc`
-      : 'Session · Healers Inc';
+    if (!appointment) {
+      document.title = 'Session · Healers Inc';
+      return;
+    }
+    const other = appointment.viewerRole === 'client' ? appointment.practitioner : appointment.client;
+    document.title = `${appointment.serviceName} with ${other.fullName} · Healers Inc`;
   }, [appointment]);
 
   // Same-tab Checkout return (`?checkout=success|cancelled`): resume polling
@@ -141,6 +170,15 @@ export default function AppointmentPage() {
 
   const notFound = query.isError && errorStatus(query.error) === 404;
 
+  function invalidateLists() {
+    void queryClient.invalidateQueries({ queryKey: getListAppointmentsQueryKey().slice(0, 1) });
+    void queryClient.invalidateQueries({ queryKey: getGetAppointmentPaymentQueryKey(appointmentId) });
+    void queryClient.invalidateQueries({ queryKey: getGetPractitionerDashboardQueryKey() });
+    void queryClient.invalidateQueries({
+      queryKey: getGetPractitionerCalendarQueryKey().slice(0, 1),
+    });
+  }
+
   function runAction(action: AppointmentActionRequestAction, extra?: { startsAt?: string }) {
     setActionError(null);
     setPendingAction(action);
@@ -154,23 +192,17 @@ export default function AppointmentPage() {
           setPendingAction(null);
           setRescheduling(false);
           queryClient.setQueryData(getGetAppointmentQueryKey(appointmentId), updated);
-          void queryClient.invalidateQueries({
-            queryKey: getListAppointmentsQueryKey().slice(0, 1),
-          });
-          void queryClient.invalidateQueries({
-            queryKey: getGetAppointmentPaymentQueryKey(appointmentId),
-          });
+          invalidateLists();
+          const titles: Record<AppointmentActionRequestAction, string> = {
+            accept: 'Request accepted',
+            decline: 'Request declined',
+            cancel: 'Session cancelled',
+            complete: 'Session marked as completed',
+            reschedule: updated.status === 'pending' ? 'New time requested' : 'Session rescheduled',
+          };
           toast({
-            title:
-              action === 'cancel'
-                ? 'Session cancelled'
-                : action === 'reschedule'
-                  ? updated.status === 'pending'
-                    ? 'New time requested'
-                    : 'Session rescheduled'
-                  : 'Session updated',
-            description:
-              action === 'reschedule' ? `Now ${updated.viewerLabel}.` : undefined,
+            title: titles[action],
+            description: action === 'reschedule' ? `Now ${updated.viewerLabel}.` : undefined,
           });
         },
         onError: (error) => {
@@ -188,9 +220,32 @@ export default function AppointmentPage() {
     );
   }
 
+  function runRefund() {
+    setActionError(null);
+    refund.mutate(
+      {
+        appointmentId,
+        data: { idempotencyKey: makeIdempotencyKey(), reason: 'Practitioner issued full refund' },
+      },
+      {
+        onSuccess: async () => {
+          await Promise.all([query.refetch(), paymentQuery.refetch()]);
+          void queryClient.invalidateQueries({ queryKey: getListPractitionerPaymentsQueryKey() });
+          invalidateLists();
+          toast({ title: 'Refund issued', description: 'The full payment is on its way back to the client.' });
+        },
+        onError: (error) => setActionError(errorMessage(error)),
+      },
+    );
+  }
+
   function handleMessage() {
     if (!appointment) return;
     setActionError(null);
+    if (isPractitioner) {
+      if (existingConversation) navigate(`/messages/${existingConversation.id}`);
+      return;
+    }
     openConversation.mutate(
       { data: { practitionerId: appointment.practitioner.id } },
       {
@@ -250,16 +305,23 @@ export default function AppointmentPage() {
     );
   }
 
-  const practitioner = appointment.practitioner;
-  const firstName = practitioner.fullName.split(' ')[0] ?? practitioner.fullName;
+  const counterpart = isPractitioner ? appointment.client : appointment.practitioner;
+  const counterpartZone = isPractitioner ? appointment.clientTimezone : appointment.practitionerTimezone;
+  const firstName = counterpart.fullName.split(' ')[0] ?? counterpart.fullName;
   const showBothZones = appointment.clientTimezone !== appointment.practitionerTimezone;
   const isPast = new Date(appointment.endsAt).getTime() < Date.now();
   const isOpen = appointment.status === 'pending' || appointment.status === 'confirmed';
+  const backHref = isPractitioner ? '/schedule' : '/bookings';
+  const backLabel = isPractitioner ? 'Schedule' : 'Your sessions';
 
+  const canAcceptDecline = isPractitioner && appointment.status === 'pending';
+  const canComplete = isPractitioner && appointment.status === 'confirmed' && isPast;
+  const canRefund = isPractitioner && payment?.status === 'paid';
   const canCancel = isOpen && !isPast;
   const canReschedule = isOpen && !isPast;
-  const canReview = appointment.canReview && !appointment.hasReview;
+  const canReview = !isPractitioner && appointment.canReview && !appointment.hasReview;
   const canPay =
+    !isPractitioner &&
     appointment.status === 'confirmed' &&
     !isPast &&
     (payment?.status === 'checkout_available' ||
@@ -275,6 +337,10 @@ export default function AppointmentPage() {
 
   const busy = act.isPending;
   const errorText = actionError ?? checkout.error;
+  const cancelLabel = appointment.status === 'pending' ? 'Cancel request' : 'Cancel session';
+  const messageDisabled = isPractitioner
+    ? conversationsQuery.isLoading || !existingConversation
+    : openConversation.isPending;
 
   const actions = (
     <div className="flex flex-col gap-3" data-testid="appointment-actions">
@@ -286,17 +352,45 @@ export default function AppointmentPage() {
           disabled={checkout.isStarting || checkout.isConfirming}
           data-testid="appointment-pay-securely"
         >
-          {checkout.isStarting ? (
-            <Spinner className="w-4 h-4" />
-          ) : checkout.isConfirming ? (
-            <Spinner className="w-4 h-4" />
-          ) : null}
+          {checkout.isStarting || checkout.isConfirming ? <Spinner className="w-4 h-4" /> : null}
           {checkout.isStarting
             ? 'Opening checkout…'
             : checkout.isConfirming
               ? 'Confirming payment…'
               : checkoutTitle}
         </Button>
+      ) : null}
+
+      {canAcceptDecline ? (
+        <>
+          <Button size="lg" className="w-full" disabled={busy} onClick={() => runAction('accept')} data-testid="appointment-accept">
+            {busy && pendingAction === 'accept' ? <Spinner className="w-4 h-4" /> : <Check className="w-4 h-4" aria-hidden />}
+            Accept request
+          </Button>
+          <Button variant="destructive" className="w-full" disabled={busy} onClick={() => setConfirming('decline')} data-testid="appointment-decline">
+            {busy && pendingAction === 'decline' ? <Spinner className="w-4 h-4" /> : null}
+            Decline
+          </Button>
+        </>
+      ) : null}
+
+      {canComplete ? (
+        <Button size="lg" className="w-full" disabled={busy} onClick={() => runAction('complete')} data-testid="appointment-complete">
+          {busy && pendingAction === 'complete' ? <Spinner className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" aria-hidden />}
+          Mark as completed
+        </Button>
+      ) : null}
+
+      {canRefund ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground">
+            Cancellations before the notice window are refunded automatically. Late cancellations are not; you can choose to issue a full refund.
+          </p>
+          <Button variant="destructive" className="w-full" disabled={refund.isPending} onClick={() => setConfirming('refund')} data-testid="appointment-full-refund">
+            {refund.isPending ? <Spinner className="w-4 h-4" /> : null}
+            Issue full refund
+          </Button>
+        </div>
       ) : null}
 
       {canReview ? (
@@ -309,13 +403,7 @@ export default function AppointmentPage() {
       ) : null}
 
       {canReschedule && !rescheduling ? (
-        <Button
-          variant="outline"
-          className="w-full"
-          disabled={busy}
-          onClick={() => setRescheduling(true)}
-          data-testid="appointment-reschedule"
-        >
+        <Button variant="outline" className="w-full" disabled={busy} onClick={() => setRescheduling(true)} data-testid="appointment-reschedule">
           <RefreshCw className="w-4 h-4" aria-hidden />
           Reschedule
         </Button>
@@ -324,56 +412,77 @@ export default function AppointmentPage() {
       <Button
         variant="outline"
         className="w-full"
-        disabled={openConversation.isPending}
+        disabled={messageDisabled}
         onClick={handleMessage}
+        title={isPractitioner && !existingConversation && !conversationsQuery.isLoading ? `${firstName} has not started a conversation yet.` : undefined}
         data-testid="appointment-message"
       >
-        {openConversation.isPending ? (
-          <Spinner className="w-4 h-4" />
-        ) : (
-          <MessageCircle className="w-4 h-4" aria-hidden />
-        )}
+        {openConversation.isPending ? <Spinner className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" aria-hidden />}
         Message {firstName}
       </Button>
+      {isPractitioner && !existingConversation && !conversationsQuery.isLoading ? (
+        <p className="text-xs text-muted-foreground -mt-1" data-testid="appointment-message-hint">
+          Clients start conversations; {firstName} has not messaged you yet.
+        </p>
+      ) : null}
 
-      <Button
-        variant="ghost"
-        className="w-full"
-        disabled={calendarBusy}
-        onClick={() => void handleAddToCalendar()}
-        data-testid="appointment-add-to-calendar"
-      >
-        {calendarBusy ? (
-          <Spinner className="w-4 h-4" />
-        ) : (
-          <CalendarPlus className="w-4 h-4 text-primary" aria-hidden />
-        )}
+      <Button variant="ghost" className="w-full" disabled={calendarBusy} onClick={() => void handleAddToCalendar()} data-testid="appointment-add-to-calendar">
+        {calendarBusy ? <Spinner className="w-4 h-4" /> : <CalendarPlus className="w-4 h-4 text-primary" aria-hidden />}
         Add to calendar
       </Button>
 
       {canCancel ? (
-        <Button
-          variant="destructive"
-          className="w-full"
-          disabled={busy}
-          onClick={() => setCancelOpen(true)}
-          data-testid="appointment-cancel"
-        >
+        <Button variant={canAcceptDecline ? 'ghost' : 'destructive'} className="w-full" disabled={busy} onClick={() => setConfirming('cancel')} data-testid="appointment-cancel">
           {busy && pendingAction === 'cancel' ? <Spinner className="w-4 h-4" /> : null}
-          {appointment.status === 'pending' ? 'Cancel request' : 'Cancel session'}
+          {cancelLabel}
         </Button>
       ) : null}
     </div>
   );
 
+  const paymentCard = payment ? (
+    <PaymentCard
+      payment={payment}
+      confirming={checkout.isConfirming}
+      timedOut={checkout.timedOut}
+      onCheckAgain={checkout.resumeConfirming}
+      showNet={isPractitioner}
+    />
+  ) : null;
+
+  const confirmCopy: Record<Confirmation, { title: string; body: string; action: string; keep: string; run: () => void }> = {
+    cancel: {
+      title: cancelLabel,
+      body: appointment.status === 'confirmed' ? CANCEL_COPY.confirmed : CANCEL_COPY.pending,
+      action: cancelLabel,
+      keep: 'Keep session',
+      run: () => runAction('cancel'),
+    },
+    decline: {
+      title: 'Decline request',
+      body: `Decline ${firstName}'s booking request? They will be notified.`,
+      action: 'Decline',
+      keep: 'Back',
+      run: () => runAction('decline'),
+    },
+    refund: {
+      title: 'Issue full refund',
+      body: 'This returns the full payment to the client. Cancellations made before the notice window are already refunded automatically; late cancellations are not.',
+      action: 'Issue refund',
+      keep: 'Keep payment',
+      run: runRefund,
+    },
+  };
+  const dialog = confirming ? confirmCopy[confirming] : null;
+
   return (
     <Page testId="page-appointment" className="pb-28 lg:pb-16">
       <PageHeader
-        eyebrow="Session"
+        eyebrow={isPractitioner ? 'Session with a client' : 'Session'}
         title={appointment.serviceName}
-        description={`With ${practitioner.fullName}`}
-        backHref="/bookings"
-        backLabel="Your sessions"
+        description={`With ${counterpart.fullName}`}
+        backHref={backHref}
+        backLabel={backLabel}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] gap-6 lg:gap-8 items-start">
@@ -382,28 +491,35 @@ export default function AppointmentPage() {
           <Card>
             <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
               <div className="flex items-center gap-3">
-                <Link
-                  href={`/practitioner/${practitioner.id}`}
-                  className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={`View ${practitioner.fullName}'s profile`}
-                >
-                  <UserAvatar
-                    name={practitioner.fullName}
-                    avatarUrl={practitioner.avatarUrl}
-                    className="h-14 w-14"
-                    fallbackClassName="text-base"
-                  />
-                </Link>
-                <div className="min-w-0 flex-1">
+                {isPractitioner ? (
+                  <UserAvatar name={counterpart.fullName} avatarUrl={counterpart.avatarUrl} className="h-14 w-14" fallbackClassName="text-base" />
+                ) : (
                   <Link
-                    href={`/practitioner/${practitioner.id}`}
-                    className="font-semibold text-lg text-foreground hover:text-primary truncate block"
-                    data-testid="appointment-practitioner-link"
+                    href={`/practitioner/${counterpart.id}`}
+                    className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`View ${counterpart.fullName}'s profile`}
                   >
-                    {practitioner.fullName}
+                    <UserAvatar name={counterpart.fullName} avatarUrl={counterpart.avatarUrl} className="h-14 w-14" fallbackClassName="text-base" />
                   </Link>
-                  {practitioner.headline ? (
-                    <p className="text-sm text-muted-foreground truncate">{practitioner.headline}</p>
+                )}
+                <div className="min-w-0 flex-1">
+                  {isPractitioner ? (
+                    <p className="font-semibold text-lg text-foreground truncate" data-testid="appointment-client-name">
+                      {counterpart.fullName}
+                    </p>
+                  ) : (
+                    <Link
+                      href={`/practitioner/${counterpart.id}`}
+                      className="font-semibold text-lg text-foreground hover:text-primary truncate block"
+                      data-testid="appointment-practitioner-link"
+                    >
+                      {counterpart.fullName}
+                    </Link>
+                  )}
+                  {counterpart.headline ? (
+                    <p className="text-sm text-muted-foreground truncate">{counterpart.headline}</p>
+                  ) : isPractitioner ? (
+                    <p className="text-sm text-muted-foreground truncate">Client · {zoneCity(counterpart.timezone)}</p>
                   ) : null}
                 </div>
                 <StatusBadge status={appointment.status} full />
@@ -419,28 +535,15 @@ export default function AppointmentPage() {
           {/* When */}
           <Card>
             <CardContent className="flex flex-col gap-4 p-4 sm:p-5">
-              <InfoRow
-                icon={CalendarDays}
-                label={`Your time (${zoneCity(appointment.viewerTimezone)})`}
-                value={appointment.viewerLabel}
-                testId="appointment-viewer-time"
-              />
+              <InfoRow icon={CalendarDays} label={`Your time (${zoneCity(appointment.viewerTimezone)})`} value={appointment.viewerLabel} testId="appointment-viewer-time" />
               {showBothZones ? (
-                <InfoRow
-                  icon={Globe}
-                  label={`${firstName}'s time (${zoneCity(appointment.practitionerTimezone)})`}
-                  value={appointment.counterpartLabel}
-                  testId="appointment-counterpart-time"
-                />
+                <InfoRow icon={Globe} label={`${firstName}'s time (${zoneCity(counterpartZone)})`} value={appointment.counterpartLabel} testId="appointment-counterpart-time" />
               ) : null}
               <Separator />
               <InfoRow
                 icon={Clock}
                 label="Duration"
-                value={`${formatDuration(appointment.serviceDurationMinutes)} · ends ${clockInZone(
-                  appointment.endsAt,
-                  appointment.viewerTimezone,
-                )}`}
+                value={`${formatDuration(appointment.serviceDurationMinutes)} · ends ${clockInZone(appointment.endsAt, appointment.viewerTimezone)}`}
               />
             </CardContent>
           </Card>
@@ -450,30 +553,17 @@ export default function AppointmentPage() {
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 sm:p-5">
               <InfoRow icon={Bookmark} label="Service" value={appointment.serviceName} />
               <InfoRow icon={Video} label="Format" value={sessionFormatLabel[appointment.serviceFormat]} />
-              <InfoRow
-                icon={Tag}
-                label="Price"
-                value={formatMoney(appointment.servicePriceCents, appointment.serviceCurrency)}
-              />
+              <InfoRow icon={Tag} label="Price" value={formatMoney(appointment.servicePriceCents, appointment.serviceCurrency)} />
             </CardContent>
           </Card>
 
-          {payment ? (
-            <div className="lg:hidden">
-              <PaymentCard
-                payment={payment}
-                confirming={checkout.isConfirming}
-                timedOut={checkout.timedOut}
-                onCheckAgain={checkout.resumeConfirming}
-              />
-            </div>
-          ) : null}
+          {paymentCard ? <div className="lg:hidden">{paymentCard}</div> : null}
 
           {appointment.clientNotes ? (
             <Card>
               <CardContent className="flex flex-col gap-2 p-4 sm:p-5">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Your notes
+                  {isPractitioner ? 'Client notes' : 'Your notes'}
                 </p>
                 <p className="text-sm text-foreground whitespace-pre-line">{appointment.clientNotes}</p>
               </CardContent>
@@ -483,12 +573,8 @@ export default function AppointmentPage() {
           {appointment.cancellationReason ? (
             <Card>
               <CardContent className="flex flex-col gap-2 p-4 sm:p-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cancellation reason
-                </p>
-                <p className="text-sm text-foreground whitespace-pre-line">
-                  {appointment.cancellationReason}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cancellation reason</p>
+                <p className="text-sm text-foreground whitespace-pre-line">{appointment.cancellationReason}</p>
               </CardContent>
             </Card>
           ) : null}
@@ -507,21 +593,15 @@ export default function AppointmentPage() {
 
         {/* Desktop rail */}
         <aside className="hidden lg:flex flex-col gap-4 lg:sticky lg:top-24">
-          {payment ? (
-            <PaymentCard
-              payment={payment}
-              confirming={checkout.isConfirming}
-              timedOut={checkout.timedOut}
-              onCheckAgain={checkout.resumeConfirming}
-            />
-          ) : paymentQuery.isLoading ? (
-            <Card>
-              <CardContent className="flex items-center gap-3 p-4">
-                <Spinner className="w-4 h-4" />
-                <p className="text-sm text-muted-foreground">Loading payment…</p>
-              </CardContent>
-            </Card>
-          ) : null}
+          {paymentCard ??
+            (paymentQuery.isLoading ? (
+              <Card>
+                <CardContent className="flex items-center gap-3 p-4">
+                  <Spinner className="w-4 h-4" />
+                  <p className="text-sm text-muted-foreground">Loading payment…</p>
+                </CardContent>
+              </Card>
+            ) : null)}
           <Card>
             <CardContent className="p-4">{actions}</CardContent>
           </Card>
@@ -531,24 +611,20 @@ export default function AppointmentPage() {
       {/* Mobile / tablet actions */}
       <div className="lg:hidden mt-6">{actions}</div>
 
-      <AlertDialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <AlertDialogContent data-testid="appointment-cancel-dialog">
+      <AlertDialog open={confirming !== null} onOpenChange={(open) => (!open ? setConfirming(null) : undefined)}>
+        <AlertDialogContent data-testid="appointment-confirm-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {appointment.status === 'pending' ? 'Cancel request' : 'Cancel session'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {appointment.status === 'confirmed' ? CANCEL_COPY.confirmed : CANCEL_COPY.pending}
-            </AlertDialogDescription>
+            <AlertDialogTitle>{dialog?.title}</AlertDialogTitle>
+            <AlertDialogDescription>{dialog?.body}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel data-testid="appointment-cancel-keep">Keep session</AlertDialogCancel>
+            <AlertDialogCancel data-testid="appointment-confirm-keep">{dialog?.keep}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => runAction('cancel')}
-              data-testid="appointment-cancel-confirm"
+              onClick={() => dialog?.run()}
+              data-testid="appointment-confirm-action"
             >
-              {appointment.status === 'pending' ? 'Cancel request' : 'Cancel session'}
+              {dialog?.action}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
