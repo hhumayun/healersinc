@@ -1938,6 +1938,10 @@ components:
           enum:
             - native
             - web
+        returnBaseUrl:
+          type: string
+          format: uri
+          description: Web only. Base URL of the site to return to; must be one of the server's allowlisted web return origins.
       required:
         - idempotencyKey
         - returnTarget

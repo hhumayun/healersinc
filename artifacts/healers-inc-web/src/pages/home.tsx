@@ -22,7 +22,15 @@ import {
 } from '@workspace/healers-inc/components/ui/card';
 import { Separator } from '@workspace/healers-inc/components/ui/separator';
 import { cn } from '@workspace/healers-inc/lib/utils';
+import {
+  getSearchPractitionersQueryKey,
+  useSearchPractitioners,
+  type SearchPractitionersParams,
+} from '@workspace/api-client-react';
 import { MobileCta } from '@/components/mobile-cta';
+import { UserAvatar } from '@/components/user-avatar';
+import { formatRating, zoneCity } from '@/lib/format';
+import { browserTimezone } from '@/lib/session';
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 24 },
@@ -51,35 +59,144 @@ const MODALITIES = [
   'Life Coaching',
 ];
 
-const PRACTITIONERS = [
+type ShowcaseCard = {
+  id: string;
+  href: string;
+  name: string;
+  specialty: string;
+  zone: string;
+  rating: string;
+  reviews: number;
+  availableLabel: string | null;
+  avatarUrl?: string | null;
+};
+
+/** Shown while the live directory loads, or if it is unreachable. */
+const FALLBACK_PRACTITIONERS: ShowcaseCard[] = [
   {
-    id: 1,
+    id: 'fallback-1',
+    href: '/discover',
     name: 'Dr. Amara Osei',
     specialty: 'Integrative Psychotherapy',
-    timezone: 'London, UK',
+    zone: 'London, UK',
     rating: '4.97',
     reviews: 142,
-    available: true,
+    availableLabel: 'Available this week',
   },
   {
-    id: 2,
+    id: 'fallback-2',
+    href: '/discover',
     name: 'Mei Lin Huang',
     specialty: 'Traditional Chinese Medicine',
-    timezone: 'Singapore',
+    zone: 'Singapore',
     rating: '4.94',
     reviews: 89,
-    available: true,
+    availableLabel: 'Available this week',
   },
   {
-    id: 3,
+    id: 'fallback-3',
+    href: '/discover',
     name: 'Javier Santos',
     specialty: 'Somatic & Breathwork',
-    timezone: 'Buenos Aires',
+    zone: 'Buenos Aires',
     rating: '4.98',
     reviews: 211,
-    available: false,
+    availableLabel: null,
   },
 ];
+
+const SHOWCASE_PARAMS: SearchPractitionersParams = {
+  pageSize: 3,
+  sort: 'rating',
+  timezone: browserTimezone(),
+};
+
+/**
+ * Three real practitioners from the live directory, each card linking to its
+ * profile. Falls back to illustrative cards until the API answers.
+ */
+function ShowcaseGrid() {
+  const search = useSearchPractitioners(SHOWCASE_PARAMS, {
+    query: {
+      queryKey: getSearchPractitionersQueryKey(SHOWCASE_PARAMS),
+      staleTime: 5 * 60_000,
+    },
+  });
+
+  const cards: ShowcaseCard[] =
+    search.data && search.data.items.length > 0
+      ? search.data.items.slice(0, 3).map((p) => ({
+          id: p.id,
+          href: `/practitioner/${p.id}`,
+          name: p.fullName,
+          specialty: p.headline ?? p.modality,
+          zone: p.location ?? zoneCity(p.timezone),
+          rating: formatRating(p.ratingAverage, p.ratingCount),
+          reviews: p.ratingCount,
+          availableLabel: p.nextAvailableLabel ? `Next: ${p.nextAvailableLabel}` : null,
+          avatarUrl: p.avatarUrl,
+        }))
+      : FALLBACK_PRACTITIONERS;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="practitioner-showcase">
+      {cards.map((p, i) => (
+        <motion.div
+          key={p.id}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1, duration: 0.45 }}
+        >
+          <Link href={p.href} className="block h-full" data-testid={`practitioner-card-${p.id}`}>
+            <Card className="group h-full border-border hover:shadow-md hover:border-primary/40 transition-all duration-300">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between mb-5">
+                  <UserAvatar
+                    name={p.name}
+                    avatarUrl={p.avatarUrl}
+                    className="w-14 h-14 rounded-2xl"
+                    fallbackClassName="rounded-2xl text-2xl bg-primary text-primary-foreground"
+                  />
+                  <Badge
+                    variant={p.availableLabel ? 'default' : 'outline'}
+                    className="text-xs"
+                    data-testid={`practitioner-availability-${p.id}`}
+                  >
+                    {p.availableLabel ?? 'Waitlist open'}
+                  </Badge>
+                </div>
+
+                <h3 className="font-semibold text-foreground mb-0.5 group-hover:text-primary transition-colors" data-testid={`practitioner-name-${p.id}`}>
+                  {p.name}
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4 line-clamp-1" data-testid={`practitioner-specialty-${p.id}`}>
+                  {p.specialty}
+                </p>
+
+                <Separator className="mb-4" />
+
+                <div className="flex items-center justify-between text-sm gap-3">
+                  <span className="text-muted-foreground flex items-center gap-1.5 min-w-0">
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate" data-testid={`practitioner-timezone-${p.id}`}>{p.zone}</span>
+                  </span>
+                  <span className="flex items-center gap-1 font-medium text-foreground shrink-0">
+                    <Star className="w-3.5 h-3.5 fill-primary text-primary" />
+                    <span data-testid={`practitioner-rating-${p.id}`}>{p.rating}</span>
+                    {p.reviews > 0 ? (
+                      <span className="text-muted-foreground font-normal">({p.reviews})</span>
+                    ) : null}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
 
 const STEPS = [
   {
@@ -195,11 +312,12 @@ export default function Home() {
             custom={3}
             className="flex flex-col sm:flex-row gap-4 items-center justify-center"
           >
-            <MobileCta
-              label="Find your practitioner"
-              size="lg"
-              testId="hero-cta-primary"
-            />
+            <Button size="lg" asChild data-testid="hero-cta-primary">
+              <Link href="/discover" className="gap-2 flex items-center">
+                Find your practitioner
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </Button>
             <Button
               variant="ghost"
               size="lg"
@@ -211,6 +329,14 @@ export default function Home() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
+          </motion.div>
+          <motion.div variants={fadeUp} custom={4} className="mt-4">
+            <MobileCta
+              label="Prefer the app? Get it for iPhone and Android"
+              variant="link"
+              size="sm"
+              testId="hero-cta-app"
+            />
           </motion.div>
         </motion.div>
 
@@ -343,72 +469,15 @@ export default function Home() {
                 Practitioners who bring their whole selves
               </h2>
             </div>
-            <MobileCta
-              label="Browse all practitioners"
-              variant="outline"
-              testId="practitioners-browse-cta"
-            />
+            <Button variant="outline" asChild data-testid="practitioners-browse-cta">
+              <Link href="/discover" className="gap-2 flex items-center">
+                Browse all practitioners
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </Button>
           </motion.div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {PRACTITIONERS.map((p, i) => (
-              <motion.div
-                key={p.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.45 }}
-              >
-                <Card
-                  className="group border-border hover:shadow-md transition-all duration-300 cursor-default"
-                  data-testid={`practitioner-card-${p.id}`}
-                >
-                  <CardContent className="p-6">
-                    {/* Avatar area */}
-                    <div className="flex items-start justify-between mb-5">
-                      <div
-                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold text-primary-foreground"
-                        style={{
-                          background: `hsl(var(--primary) / ${0.7 + i * 0.1})`,
-                        }}
-                        data-testid={`practitioner-avatar-${p.id}`}
-                      >
-                        {p.name.charAt(0)}
-                      </div>
-                      <Badge
-                        variant={p.available ? 'default' : 'outline'}
-                        className="text-xs"
-                        data-testid={`practitioner-availability-${p.id}`}
-                      >
-                        {p.available ? 'Available now' : 'Waitlist open'}
-                      </Badge>
-                    </div>
-
-                    <h3 className="font-semibold text-foreground mb-0.5" data-testid={`practitioner-name-${p.id}`}>
-                      {p.name}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4" data-testid={`practitioner-specialty-${p.id}`}>
-                      {p.specialty}
-                    </p>
-
-                    <Separator className="mb-4" />
-
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <Globe className="w-3.5 h-3.5" />
-                        <span data-testid={`practitioner-timezone-${p.id}`}>{p.timezone}</span>
-                      </span>
-                      <span className="flex items-center gap-1 font-medium text-foreground">
-                        <Star className="w-3.5 h-3.5 fill-primary text-primary" />
-                        <span data-testid={`practitioner-rating-${p.id}`}>{p.rating}</span>
-                        <span className="text-muted-foreground font-normal">({p.reviews})</span>
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
+          <ShowcaseGrid />
         </div>
       </section>
 
@@ -568,12 +637,9 @@ export default function Home() {
               Discover practitioners who see you, wherever you are in the world.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-              <MobileCta
-                label="Get started — it's free"
-                variant="secondary"
-                size="lg"
-                testId="final-cta-primary"
-              />
+              <Button variant="secondary" size="lg" asChild data-testid="final-cta-primary">
+                <Link href="/sign-up">Get started — it&apos;s free</Link>
+              </Button>
               <Link
                 href="/practitioners"
                 className={cn(

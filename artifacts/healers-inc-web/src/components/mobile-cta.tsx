@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'wouter';
 import { Smartphone, ExternalLink } from 'lucide-react';
 import { Button } from '@workspace/healers-inc/components/ui/button';
 import {
@@ -13,10 +14,12 @@ import { cn } from '@workspace/healers-inc/lib/utils';
 interface MobileCtaProps {
   label: string;
   appPath?: string;
-  variant?: 'default' | 'secondary' | 'outline' | 'ghost';
+  variant?: 'default' | 'secondary' | 'outline' | 'ghost' | 'link';
   size?: 'default' | 'sm' | 'lg';
   className?: string;
   testId?: string;
+  /** Where "Continue on the web" goes; the same journey now exists in the browser. */
+  webPath?: string;
 }
 
 function isMobileDevice(): boolean {
@@ -31,6 +34,7 @@ export function MobileCta({
   size = 'default',
   className,
   testId,
+  webPath = '/discover',
 }: MobileCtaProps) {
   const [showDialog, setShowDialog] = useState(false);
 
@@ -65,12 +69,12 @@ export function MobileCta({
               <Smartphone className="w-7 h-7 text-primary" />
             </div>
             <DialogTitle className="text-xl" data-testid="dialog-title">
-              Available on mobile
+              Also available on mobile
             </DialogTitle>
             <DialogDescription className="text-center text-base leading-relaxed" data-testid="dialog-description">
-              Healers Inc is a mobile-first experience. Download the app on your
-              iPhone or Android to discover practitioners, book sessions, and
-              manage your care journey.
+              Take Healers Inc with you. Download the app on your iPhone or
+              Android to discover practitioners, book sessions, and manage your
+              care journey on the go.
             </DialogDescription>
           </DialogHeader>
 
@@ -97,6 +101,11 @@ export function MobileCta({
                 Google Play — Android
               </Button>
             </a>
+            <Button variant="ghost" className="w-full" asChild data-testid="dialog-continue-web">
+              <Link href={webPath} onClick={() => setShowDialog(false)}>
+                Continue on the web
+              </Link>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

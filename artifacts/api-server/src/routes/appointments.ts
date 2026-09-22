@@ -54,7 +54,7 @@ import { countryIsEligible, paymentPolicy } from "../lib/paymentPolicy";
 import { publicApiBaseUrl } from "../lib/publicUrl";
 import {
   checkoutReturnUrls,
-  paymentWebReturnBaseUrl,
+  resolveWebReturnBaseUrl,
 } from "../lib/paymentReturnUrls";
 import { getUncachableStripeClient } from "../stripeClient";
 
@@ -596,7 +596,9 @@ router.post(
       returnTarget: body.returnTarget,
       apiBaseUrl: publicApiBaseUrl(),
       webBaseUrl:
-        body.returnTarget === "web" ? paymentWebReturnBaseUrl() : undefined,
+        body.returnTarget === "web"
+          ? resolveWebReturnBaseUrl(body.returnBaseUrl)
+          : undefined,
     });
     const checkout = await createCheckout({
       appointment,

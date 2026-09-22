@@ -1252,7 +1252,8 @@ export const createAppointmentCheckoutBodyIdempotencyKeyMax = 128;
 
 export const CreateAppointmentCheckoutBody = zod.object({
   "idempotencyKey": zod.string().min(createAppointmentCheckoutBodyIdempotencyKeyMin).max(createAppointmentCheckoutBodyIdempotencyKeyMax),
-  "returnTarget": zod.enum(['native', 'web'])
+  "returnTarget": zod.enum(['native', 'web']),
+  "returnBaseUrl": zod.url().optional().describe('Web only. Base URL of the site to return to; must be one of the server\'s allowlisted web return origins.')
 })
 
 export const CreateAppointmentCheckoutResponse = zod.object({

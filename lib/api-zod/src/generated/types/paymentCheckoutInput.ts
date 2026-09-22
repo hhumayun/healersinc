@@ -14,4 +14,6 @@ export interface PaymentCheckoutInput {
      */
   idempotencyKey: string;
   returnTarget: PaymentCheckoutInputReturnTarget;
+  /** Web only. Base URL of the site to return to; must be one of the server's allowlisted web return origins. */
+  returnBaseUrl?: string;
 }

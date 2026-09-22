@@ -13,6 +13,9 @@ Neon (Postgres), Railway (servers) and Clerk (auth).
 - `pnpm --filter @workspace/api-server run seed` — load demo practitioners (demo rows only; they cannot sign in)
 - `pnpm --filter @workspace/healers-app run dev` — Expo dev server for the mobile app
 - `pnpm --filter @workspace/healers-app run build:web` — static web export of the app
+- `PORT=5173 BASE_PATH=/ pnpm --filter @workspace/healers-inc-web run dev` — the web site (marketing + client
+  booking flows). Needs `VITE_API_URL` and `VITE_CLERK_PUBLISHABLE_KEY` (see
+  `artifacts/healers-inc-web/.env.example`; put them in `.env.local`).
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - Copy `.env.example` to `.env` for the full list of environment variables.
@@ -22,7 +25,7 @@ Neon (Postgres), Railway (servers) and Clerk (auth).
 - pnpm workspaces, Node.js 24, TypeScript 5.9
 - API: Express 5, WebSocket realtime at `/api/ws`
 - DB: Neon Postgres + Drizzle ORM, migrations in `lib/db/migrations`
-- Auth: Clerk (`@clerk/clerk-expo` on the device, `@clerk/backend` on the API)
+- Auth: Clerk (`@clerk/clerk-expo` on the device, `@clerk/clerk-react` on the web site, `@clerk/backend` on the API)
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
 - Build: esbuild (ESM bundle), Docker image for Railway
@@ -31,7 +34,10 @@ Neon (Postgres), Railway (servers) and Clerk (auth).
 
 - `artifacts/api-server` — Express API. Entry `src/index.ts`, routes in `src/routes`.
 - `artifacts/healers-app` — Expo Router mobile app (iOS, Android, web).
-- `artifacts/healers-inc-web` — marketing site (Vite). No API calls.
+- `artifacts/healers-inc-web` — the web site (Vite + wouter): marketing pages plus the
+  full client journey in the browser (sign in/up with Clerk, discover, book, bookings,
+  payments, messages, notifications, reviews, account). `src/lib/session.tsx` mirrors the
+  app's session layer; client-only routes are wrapped in `RequireClient`.
 - `artifacts/healers-inc`, `artifacts/mockup-sandbox` — design-system previews, dev only.
 - `lib/db/src/schema` — Drizzle schema, the source of truth for the database.
 - `lib/api-spec/openapi.yaml` — API contract; generated client in `lib/api-client-react`, Zod in `lib/api-zod`.
@@ -104,6 +110,13 @@ Native builds (iOS/Android) use EAS or `expo run:*` with the same
   never declares its role. Switching portals is `POST /api/auth/switch-role`.
 - Native Stripe Checkout returns through fixed API handlers into the
   `healers-app://` scheme. Expo web Checkout uses `PAYMENT_WEB_RETURN_BASE_URL`.
+  The Healers Inc web site (`artifacts/healers-inc-web`) sends its own origin as
+  `returnBaseUrl`; the API only honours it when it matches an entry in
+  `PAYMENT_WEB_RETURN_ALLOWED_BASE_URLS` (comma-separated HTTPS base URLs, e.g.
+  `https://healers.example,https://www.healers.example`; `http://localhost:*` is
+  also accepted outside production). Set that variable on the API service to
+  the web site's public origin, or web Checkout from the site is refused with
+  a 400.
 
 ## Gotchas
 
