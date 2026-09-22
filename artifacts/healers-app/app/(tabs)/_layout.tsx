@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Redirect, Tabs } from 'expo-router';
-import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
 import {
   fontFamily,
@@ -24,26 +24,26 @@ function NativeTabLayout({ practitioner }: { practitioner: boolean }) {
     <NativeTabs>
       {practitioner ? (
         <NativeTabs.Trigger name="dashboard">
-          <Icon sf={{ default: 'square.grid.2x2', selected: 'square.grid.2x2.fill' }} />
-          <Label>Practice</Label>
+          <NativeTabs.Trigger.Icon sf={{ default: 'square.grid.2x2', selected: 'square.grid.2x2.fill' }} />
+          <NativeTabs.Trigger.Label>Practice</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       ) : (
         <NativeTabs.Trigger name="explore">
-          <Icon sf={{ default: 'magnifyingglass', selected: 'magnifyingglass' }} />
-          <Label>Explore</Label>
+          <NativeTabs.Trigger.Icon sf={{ default: 'magnifyingglass', selected: 'magnifyingglass' }} />
+          <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       )}
       <NativeTabs.Trigger name="bookings">
-        <Icon sf={{ default: 'calendar', selected: 'calendar' }} />
-        <Label>{practitioner ? 'Calendar' : 'Sessions'}</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'calendar', selected: 'calendar' }} />
+        <NativeTabs.Trigger.Label>{practitioner ? 'Calendar' : 'Sessions'}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="messages">
-        <Icon sf={{ default: 'bubble.left', selected: 'bubble.left.fill' }} />
-        <Label>Messages</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'bubble.left', selected: 'bubble.left.fill' }} />
+        <NativeTabs.Trigger.Label>Messages</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: 'person', selected: 'person.fill' }} />
-        <Label>You</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
+        <NativeTabs.Trigger.Label>You</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

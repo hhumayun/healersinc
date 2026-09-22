@@ -7,12 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "healers-app",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#f7f7f8"
-    },
     "ios": {
       "supportsTablet": false
     },
@@ -24,7 +18,15 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#f7f7f8"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
