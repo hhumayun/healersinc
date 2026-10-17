@@ -3,3 +3,4 @@
 - [API contract discipline](api-contract-discipline.md) — spec/route path drift 404s, zod coercing missing query params to "undefined", and time-aware status guards.
 - [Expo browser worklets](expo-web-worklets.md) — optional native Worklets can crash Expo Router before the web preview renders.
 - [Stripe Connect sandbox onboarding](stripe-connect-sandbox-onboarding.md) — hosted UK test onboarding needs Stripe’s success-trigger values or capabilities stay restricted.
+- [Postgres pool idle-client crash](pg-pool-idle-error-crash.md) — the shared pg Pool has no 'error' listener, so a dropped idle connection (Neon compute restart) crashes the API process.
